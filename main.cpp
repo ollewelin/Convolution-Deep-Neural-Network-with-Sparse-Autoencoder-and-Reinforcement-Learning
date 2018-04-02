@@ -22,7 +22,6 @@ int main()
                                             ///So if for example the input data come a convolution cube the Lx_IN_depth is the number of the depth of this convolution cube source/input data
                                             ///In a chain of Layer's the Lx_IN_depth will the same size as the Lx_OUT_depth of the previous layer order.
     cnn_autoenc_layer1.Lx_OUT_depth     = 10;///This is the number of atom's in the whole dictionary.
-    cnn_autoenc_layer1.convolution_mode = 0;///0= Do sparse autoenc learning process. 0= Not full convolution process. 1 = do convolution operation not do sparse patch learning.
     cnn_autoenc_layer1.stride           = 2;
     cnn_autoenc_layer1.Lx_IN_hight      = 28;///Convolution cube hight of data
     cnn_autoenc_layer1.Lx_IN_widht      = 28;///Convolution cube width of data

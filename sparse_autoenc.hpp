@@ -19,13 +19,14 @@ class sparse_autoenc
         sparse_autoenc() {}
         virtual ~sparse_autoenc() {}
         void init(void);
+        void learn_encoder(void);
+        void convolve_operation(void);
         int colour_mode;///1 = CV_32FC3 color mode. 0 = CV_32FC1 gray mode. colour_mode = 1 is ONLY allowed to use at Layer 1
         int patch_side_size;///Example 7 will set up 7x7 patch at 2 Dimensions of the 3D
         int Lx_IN_depth;///This is set to 1 when color mode. When gray mode this is the depth of the input data
         int Lx_OUT_depth;///This is the number of atom's in the whole dictionary.
         cv::Mat Lx_IN_convolution_cube;///The input convolution cube. Pick a spatial patch data from this Input Convolution cube when learning autoencoder
         cv::Mat Lx_OUT_convolution_cube;///The output convolution cube. one point in this data is one encoder node output data
-        int convolution_mode;///1 = do convolution operation not do sparse patch learning. 0= Do sparse autoenc learning process. 0= Not full convolution process.
         int stride;///Convolution stride level
         int Lx_IN_widht;///Input parameter how wide will the Lx_IN_convolution_cube be.
         int Lx_IN_hight;///Input parameter how high will the Lx_IN_convolution_cube be.
@@ -50,11 +51,23 @@ class sparse_autoenc
         int dict_width;
         int slide_count;///0..(slide_steps-1) count from 0 up to max when slide the convolution patch fit in
         int slide_steps;///This will be set to a max constant value at init
-
+        int convolution_mode;///1 = do convolution operation not do sparse patch learning. 0= Do sparse autoenc learning process. 0= Not full convolution process.
+        ///When convolve_operation() function called convolution_mode will set to = 1
+        ///When learn_encoder()      function called convolution_mode will set to = 0
 };
+
+void sparse_autoenc::convolve_operation(void)
+{
+    convolution_mode = 1;
+}
+void sparse_autoenc::learn_encoder(void)
+{
+    convolution_mode = 0;
+}
 
 void sparse_autoenc::init(void)
 {
+    convolution_mode = 0;
     int sqrt_nodes_plus1 = 0;
     if(patch_side_size > Lx_IN_hight)
     {
@@ -147,9 +160,11 @@ void sparse_autoenc::init(void)
     float noise = 0.0f;
     //cv_D_mat.at<float>(cv_Row, cv_Col) =
     int is_on_patch_nr=0;
-    for(int i=0; i<dict_hight; i++)
+
+    ///Initialize random data into the dictionary
+    for(int i=0; i<dict_hight; i++)///i will count up for each line on the Mat dictionary
     {
-        for(int j=0; j<(dict_width * dictionary.channels()); j++)
+        for(int j=0; j<(dict_width * dictionary.channels()); j++)///j will count up each column on the Mat dictionary. When color mode 3-step (3-color) for each pixel
         {
             if(colour_mode == 1)
             {
@@ -179,4 +194,7 @@ void sparse_autoenc::init(void)
     }
     printf("Init CNN layer object Done!\n");
 }
+
+
+
 #endif // SPARSE_AUTOENC_H
