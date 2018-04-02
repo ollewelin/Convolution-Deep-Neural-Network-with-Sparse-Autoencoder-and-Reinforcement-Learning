@@ -3,10 +3,8 @@ Under development Not workable yet. Just a place to store my code under develop 
 When finish it will be placed here.
 
 Dependency:
-OpenCV (Not use GPU yet)
 
-Install OpenCV on Linux Ubuntu:
-...
+OpenCV (Not use GPU yet)
 
 Compile:
 
