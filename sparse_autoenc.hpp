@@ -22,7 +22,9 @@ class sparse_autoenc
         void train_encoder(void);
         int training_iterations;///Input parameter. Set how many training iterations (randomized positions) on one learn_encoder() function calls
         void convolve_operation(void);
-        int colour_mode;///1 = CV_32FC3 color mode. 0 = CV_32FC1 gray mode. colour_mode = 1 is ONLY allowed to use at Layer 1
+        int color_mode;///1 = CV_32FC3 color mode. 0 = CV_32FC1 gray mode. color_mode = 1 is ONLY allowed to use at Layer 1
+        int deep_layer;///Input Parameter. Must set to 0 when this object is the FIRST layer. MUST be = 1 when a deeper layer
+        ///When deep_layer = 1 then Lx_IN_convolution_cube is same poiner as the Lx_OUT_convolution_cube of the previous layer
         int patch_side_size;///Example 7 will set up 7x7 patch at 2 Dimensions of the 3D
         int Lx_IN_depth;///This is set to 1 when color mode. When gray mode this is the depth of the input data
         int Lx_OUT_depth;///This is the number of atom's in the whole dictionary.
@@ -98,8 +100,15 @@ void sparse_autoenc::init(void)
         printf("init_noise_gain = %f is out of range 0..1.0f\n", init_noise_gain);
         exit(0);
     }
-    if(colour_mode == 1)
+    if(color_mode == 1)///Only
     {
+        if(deep_layer == 1)
+        {
+            printf("ERROR! color_mode is ONLY allowed at first layer, deep_layer = %d\n", deep_layer);
+            printf("Suggest on First layer: Set deep_layer = 0\n");
+            printf("Suggest on deeper layer: Set color_mode = 0\n");
+            exit(0);
+        }
         sqrt_nodes_plus1 = sqrt(Lx_OUT_depth);///Set up a square of nodes many small patches organized in a square
         sqrt_nodes_plus1 += 1;///Plus 1 ensure that the graphic square is large enough if the sqrt() operation get round of
         dict_hight = patch_side_size * sqrt_nodes_plus1;
@@ -109,15 +118,18 @@ void sparse_autoenc::init(void)
         if(Lx_IN_depth != 1)
         {
             printf("********\n");
-            printf("WARNING Lx_IN_depth should be = 1 when colour_mode = 1\n");
-            printf("Set Lx_IN_depth = 1 to remove this warning when colour_mode = 1\n");
-            printf("Lx_IN_depth of this Layer is NEVER used because colour_mode = 1 \n");
+            printf("WARNING Lx_IN_depth should be = 1 when color_mode = 1\n");
+            printf("Set Lx_IN_depth = 1 to remove this warning when color_mode = 1\n");
+            printf("Lx_IN_depth of this Layer is NEVER used because color_mode = 1 \n");
             printf("then the input data is always use RGB component and Lx_IN_depth now FORCED to 1\n");
             Lx_IN_depth = 1;
             printf("Lx_IN_depth = %d\n", Lx_IN_depth );
             printf("********\n");
         }
+        printf("This layer First Layer deep_layer = %d\n", deep_layer);
         Lx_IN_convolution_cube.create(Lx_IN_hight, Lx_IN_widht, CV_32FC3);
+        printf("Lx_IN_convolution_cube are now created in COLOR mode CV_32FC3\n");
+
     }
     else
     {
@@ -127,14 +139,28 @@ void sparse_autoenc::init(void)
         dict_width = patch_side_size * Lx_IN_depth;///Each column of small patches (boxes) correspond to each depth level.
         dictionary.create(dict_hight, dict_width, CV_32FC1);///Only gray
         visual_activation.create(dict_hight, dict_width, CV_32FC3);/// Color only for show activation overlay marking on the gray (green overlay)
-        Lx_IN_convolution_cube.create(Lx_IN_hight * Lx_IN_depth, Lx_IN_widht, CV_32FC1);
+        if(deep_layer == 1)
+        {
+            printf("This layer is a deep_layer = %d\n", deep_layer);
+            printf("then the Lx_IN_convolution_cube is the same physical memory\n");
+            printf("as Lx_OUT_convolution_cube only a new pointer but point on same memory\n");
+            printf("NOTE: Lx_IN_hight, Lx_IN_widht, Lx_IN_depth and \n");
+            printf("Lx_OUT_convolution_cube MUST be initialized outside this class\n");
+            printf("with related input from previous layer object to work proper\n");
+        }
+        else
+        {
+            printf("This layer First Layer deep_layer = %d\n", deep_layer);
+            Lx_IN_convolution_cube.create(Lx_IN_hight * Lx_IN_depth, Lx_IN_widht, CV_32FC1);
+            printf("Lx_IN_convolution_cube are now created in GRAY mode CV_32FC1\n");
+        }
     }
     printf("pixel dict_hight = %d\n", dict_hight);
     printf("pixel dict_width = %d\n", dict_width);
     printf("Width of Lx_IN_convolution_cube, Lx_IN_widht = %d\n", Lx_IN_widht);
     printf("Hight of Lx_IN_convolution_cube, Lx_IN_hight = %d\n", Lx_IN_hight);
     printf("Pixel Size of feature patch square side, patch_side_size = %d\n", patch_side_size);
-    printf("colour_mode = %d\n", colour_mode);
+    printf("color_mode = %d\n", color_mode);
     printf("Lx_IN_depth = %d\n", Lx_IN_depth);
     printf("Lx_OUT_depth = %d\n", Lx_OUT_depth);
     //printf("max_atom_use = %d\n", max_atom_use); ///This may changed during operation by the user control
@@ -173,7 +199,7 @@ void sparse_autoenc::init(void)
     {
         for(int j=0; j<(dict_width * dictionary.channels()); j++)///j will count up each column on the Mat dictionary. When color mode 3-step (3-color) for each pixel
         {
-            if(colour_mode == 1)
+            if(color_mode == 1)
             {
                 is_on_patch_nr = ((i/patch_side_size)*sqrt_nodes_plus1) + (j%(dict_width * dictionary.channels()))/(patch_side_size * dictionary.channels());
 //                printf("is_on_patch_nr =%d  i=%d j=%d\n ", is_on_patch_nr, i, j);
