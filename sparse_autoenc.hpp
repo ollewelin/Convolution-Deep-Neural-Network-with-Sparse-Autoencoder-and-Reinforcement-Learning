@@ -19,7 +19,8 @@ class sparse_autoenc
         sparse_autoenc() {}
         virtual ~sparse_autoenc() {}
         void init(void);
-        void learn_encoder(void);
+        void train_encoder(void);
+        int training_iterations;///Input parameter. Set how many training iterations (randomized positions) on one learn_encoder() function calls
         void convolve_operation(void);
         int colour_mode;///1 = CV_32FC3 color mode. 0 = CV_32FC1 gray mode. colour_mode = 1 is ONLY allowed to use at Layer 1
         int patch_side_size;///Example 7 will set up 7x7 patch at 2 Dimensions of the 3D
@@ -53,14 +54,14 @@ class sparse_autoenc
         int slide_steps;///This will be set to a max constant value at init
         int convolution_mode;///1 = do convolution operation not do sparse patch learning. 0= Do sparse autoenc learning process. 0= Not full convolution process.
         ///When convolve_operation() function called convolution_mode will set to = 1
-        ///When learn_encoder()      function called convolution_mode will set to = 0
+        ///When train_encoder()      function called convolution_mode will set to = 0
 };
 
 void sparse_autoenc::convolve_operation(void)
 {
     convolution_mode = 1;
 }
-void sparse_autoenc::learn_encoder(void)
+void sparse_autoenc::train_encoder(void)
 {
     convolution_mode = 0;
 }
@@ -116,6 +117,7 @@ void sparse_autoenc::init(void)
             printf("Lx_IN_depth = %d\n", Lx_IN_depth );
             printf("********\n");
         }
+        Lx_IN_convolution_cube.create(Lx_IN_hight, Lx_IN_widht, CV_32FC3);
     }
     else
     {
@@ -125,6 +127,7 @@ void sparse_autoenc::init(void)
         dict_width = patch_side_size * Lx_IN_depth;///Each column of small patches (boxes) correspond to each depth level.
         dictionary.create(dict_hight, dict_width, CV_32FC1);///Only gray
         visual_activation.create(dict_hight, dict_width, CV_32FC3);/// Color only for show activation overlay marking on the gray (green overlay)
+        Lx_IN_convolution_cube.create(Lx_IN_hight * Lx_IN_depth, Lx_IN_widht, CV_32FC1);
     }
     printf("pixel dict_hight = %d\n", dict_hight);
     printf("pixel dict_width = %d\n", dict_width);
@@ -134,6 +137,7 @@ void sparse_autoenc::init(void)
     printf("colour_mode = %d\n", colour_mode);
     printf("Lx_IN_depth = %d\n", Lx_IN_depth);
     printf("Lx_OUT_depth = %d\n", Lx_OUT_depth);
+    //printf("max_atom_use = %d\n", max_atom_use); ///This may changed during operation by the user control
     printf("stride = %d\n", stride);
 
     Lx_OUT_widht = (Lx_IN_widht - patch_side_size + 1) / stride;///No padding option is implemented in this version
@@ -149,11 +153,14 @@ void sparse_autoenc::init(void)
         exit(0);
     }
     printf("Width of Lx_OUT_convolution_cube, Lx_OUT_widht = %d\n", Lx_OUT_widht);
-    printf("Hight of the Lx_OUT_convolution_cube, Lx_OUT_hight = %d\n", Lx_OUT_hight);
+    printf("Hight of Lx_OUT_convolution_cube, Lx_OUT_hight = %d\n", Lx_OUT_hight);
+    Lx_OUT_convolution_cube.create(Lx_OUT_hight * Lx_OUT_depth, Lx_OUT_widht, CV_32FC1);
     slide_steps = Lx_OUT_widht * Lx_OUT_hight;
     printf("Convolution slide_steps (Lx_OUT_widht * Lx_OUT_hight) = %d\n", slide_steps);
-
     printf("use_dynamic_penalty = %d\n", use_dynamic_penalty);
+    printf("NOTE: Lx_IN/OUT_convolution_cube is only show 2D so the depth of the cube\n");
+    printf("is represented as several boxes on the vertical directions\n");
+    printf("so if Lx_IN/OUT_depth is large the image of IN/OUT_cube will go below the screen\n");
 
 
     srand (static_cast <unsigned> (time(0)));///Seed the randomizer
