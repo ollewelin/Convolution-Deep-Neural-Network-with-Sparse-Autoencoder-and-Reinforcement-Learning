@@ -23,8 +23,8 @@ class sparse_autoenc
         int training_iterations;///Input parameter. Set how many training iterations (randomized positions) on one learn_encoder() function calls
         void convolve_operation(void);
         int color_mode;///1 = CV_32FC3 color mode. 0 = CV_32FC1 gray mode. color_mode = 1 is ONLY allowed to use at Layer 1
-        int deep_layer;///Input Parameter. Must set to 0 when this object is the FIRST layer. MUST be = 1 when a deeper layer
-        ///When deep_layer = 1 then Lx_IN_convolution_cube is same poiner as the Lx_OUT_convolution_cube of the previous layer
+        int init_in_from_outside;///Input Parameter. Must set to 0 when this object is the FIRST layer. MUST be = 1 when a deeper layer
+        ///When init_in_from_outside = 1 then Lx_IN_convolution_cube is same poiner as the Lx_OUT_convolution_cube or Lx_pooling_cube of the previous layer
         int patch_side_size;///Example 7 will set up 7x7 patch at 2 Dimensions of the 3D
         int Lx_IN_depth;///This is set to 1 when color mode. When gray mode this is the depth of the input data
         int Lx_OUT_depth;///This is the number of atom's in the whole dictionary.
@@ -42,11 +42,12 @@ class sparse_autoenc
         float init_noise_gain;
         ///--- This 2 parameters below is the Stop condition parameters to use more atom's. ----
         float e_stop_threshold;///If the sparse coding result is below this threshold then stop use more numbers of atoms.
-        int max_atom_use;///This is the maximum number of atom from the dictionary used in the sparse coding.
-        int use_dynamic_penalty;///0 = only fix level of the 2 parameter e_stop_threshold & max_atom_use above used. 1 = penalty_add will add on the e_stop_threshold etch time a new atom is selected
+        int K_sparse;///Max atom use. This is the maximum number of atom from the dictionary used in the sparse coding. max atom use
+        int use_dynamic_penalty;///0 = only fix level of the 2 parameter e_stop_threshold & K_sparse above used. 1 = penalty_add will add on the e_stop_threshold etch time a new atom is selected
         float penalty_add;///Used when use_dynamic_penalty = 1. This value will add on the e_stop_threshold each time a new atom is selected
         ///-------------------------------------------------------------------------------------
-
+        int enable_denoising;///Input parameter
+        int denoising_percent;///Input parameter 0..100
     protected:
 
     private:
@@ -57,6 +58,8 @@ class sparse_autoenc
         int convolution_mode;///1 = do convolution operation not do sparse patch learning. 0= Do sparse autoenc learning process. 0= Not full convolution process.
         ///When convolve_operation() function called convolution_mode will set to = 1
         ///When train_encoder()      function called convolution_mode will set to = 0
+        int* score_table;///Set up a score table of the order of strength of each atom's. Only used in sparse mode. When K_sparse = Lx_OUT_depth this not used.
+
 };
 
 void sparse_autoenc::convolve_operation(void)
@@ -70,6 +73,7 @@ void sparse_autoenc::train_encoder(void)
 
 void sparse_autoenc::init(void)
 {
+    score_table = new int[Lx_OUT_depth];///Set up the size of the score_table will then contain the order of strength of each atom's. Only used in sparse mode. When K_sparse = Lx_OUT_depth this not used.
     convolution_mode = 0;
     int sqrt_nodes_plus1 = 0;
     if(patch_side_size > Lx_IN_hight)
@@ -102,10 +106,10 @@ void sparse_autoenc::init(void)
     }
     if(color_mode == 1)///Only
     {
-        if(deep_layer == 1)
+        if(init_in_from_outside == 1)
         {
-            printf("ERROR! color_mode is ONLY allowed at first layer, deep_layer = %d\n", deep_layer);
-            printf("Suggest on First layer: Set deep_layer = 0\n");
+            printf("ERROR! color_mode is ONLY allowed at first layer, init_in_from_outside = %d\n", init_in_from_outside);
+            printf("Suggest on First layer: Set init_in_from_outside = 0\n");
             printf("Suggest on deeper layer: Set color_mode = 0\n");
             exit(0);
         }
@@ -126,7 +130,7 @@ void sparse_autoenc::init(void)
             printf("Lx_IN_depth = %d\n", Lx_IN_depth );
             printf("********\n");
         }
-        printf("This layer First Layer deep_layer = %d\n", deep_layer);
+        printf("This layer First Layer init_in_from_outside = %d\n", init_in_from_outside);
         Lx_IN_convolution_cube.create(Lx_IN_hight, Lx_IN_widht, CV_32FC3);
         printf("Lx_IN_convolution_cube are now created in COLOR mode CV_32FC3\n");
 
@@ -139,18 +143,17 @@ void sparse_autoenc::init(void)
         dict_width = patch_side_size * Lx_IN_depth;///Each column of small patches (boxes) correspond to each depth level.
         dictionary.create(dict_hight, dict_width, CV_32FC1);///Only gray
         visual_activation.create(dict_hight, dict_width, CV_32FC3);/// Color only for show activation overlay marking on the gray (green overlay)
-        if(deep_layer == 1)
+        if(init_in_from_outside == 1)
         {
-            printf("This layer is a deep_layer = %d\n", deep_layer);
-            printf("then the Lx_IN_convolution_cube is the same physical memory\n");
-            printf("as Lx_OUT_convolution_cube only a new pointer but point on same memory\n");
+            printf("This layer is a init_in_from_outside = %d\n", init_in_from_outside);
             printf("NOTE: Lx_IN_hight, Lx_IN_widht, Lx_IN_depth and \n");
             printf("Lx_OUT_convolution_cube MUST be initialized outside this class\n");
-            printf("with related input from previous layer object to work proper\n");
+            printf("with related input from previous convolution\n");
+            printf("or pool layer object to work proper\n");
         }
         else
         {
-            printf("This layer First Layer deep_layer = %d\n", deep_layer);
+            printf("This layer should be the First Layer because init_in_from_outside = %d\n", init_in_from_outside);
             Lx_IN_convolution_cube.create(Lx_IN_hight * Lx_IN_depth, Lx_IN_widht, CV_32FC1);
             printf("Lx_IN_convolution_cube are now created in GRAY mode CV_32FC1\n");
         }
@@ -163,7 +166,7 @@ void sparse_autoenc::init(void)
     printf("color_mode = %d\n", color_mode);
     printf("Lx_IN_depth = %d\n", Lx_IN_depth);
     printf("Lx_OUT_depth = %d\n", Lx_OUT_depth);
-    //printf("max_atom_use = %d\n", max_atom_use); ///This may changed during operation by the user control
+    printf("K_sparse = %d\n", K_sparse); ///This may changed during operation by the user control
     printf("stride = %d\n", stride);
 
     Lx_OUT_widht = (Lx_IN_widht - patch_side_size + 1) / stride;///No padding option is implemented in this version
@@ -184,11 +187,13 @@ void sparse_autoenc::init(void)
     slide_steps = Lx_OUT_widht * Lx_OUT_hight;
     printf("Convolution slide_steps (Lx_OUT_widht * Lx_OUT_hight) = %d\n", slide_steps);
     printf("use_dynamic_penalty = %d\n", use_dynamic_penalty);
-    printf("NOTE: Lx_IN/OUT_convolution_cube is only show 2D so the depth of the cube\n");
-    printf("is represented as several boxes on the vertical directions\n");
-    printf("so if Lx_IN/OUT_depth is large the image of IN/OUT_cube will go below the screen\n");
-
-
+    if(color_mode == 0)///Only
+    {
+        printf("NOTE: Lx_IN/OUT_convolution_cube is only show 2D so the depth of the cube\n");
+        printf("is represented as several boxes on the vertical directions\n");
+        printf("so if Lx_IN/OUT_depth is large the image of IN/OUT_cube will go below the screen\n");
+        printf("enable_denoising = %d\n", enable_denoising);
+    }
     srand (static_cast <unsigned> (time(0)));///Seed the randomizer
     float noise = 0.0f;
     //cv_D_mat.at<float>(cv_Row, cv_Col) =
