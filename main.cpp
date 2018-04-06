@@ -36,7 +36,7 @@ int main()
     cnn_autoenc_layer1.K_sparse            = cnn_autoenc_layer1.Lx_OUT_depth / 4;
     cnn_autoenc_layer1.use_dynamic_penalty = 1;
     cnn_autoenc_layer1.penalty_add         = 1.5f;
-    cnn_autoenc_layer1.init_noise_gain     = 0.35f;///
+    cnn_autoenc_layer1.init_noise_gain     = 0.55f;///
     cnn_autoenc_layer1.enable_denoising    = 0;
     cnn_autoenc_layer1.denoising_percent   = 50;///0..100
 
@@ -47,10 +47,12 @@ int main()
     printf("**********************\n");
     printf("\n");
     cnn_autoenc_layer1.k_sparse_sanity_check();
+    cnn_autoenc_layer1.copy_dictionary2visual_dict();
 
     CIFAR_object.insert_L1_IN_data_cube = cnn_autoenc_layer1.Lx_IN_data_cube;///Copy over Mat pointer so CIFAR input image could be load into cnn_autoenc_layer1.Lx_IN_data_cube memory.
     CIFAR_object.insert_a_random_CIFAR_image();
     cv::imshow("Dictionary L1", cnn_autoenc_layer1.dictionary);
+    cv::imshow("Visual dict L1", cnn_autoenc_layer1.visual_dict);
     cv::imshow("L1 IN cube", cnn_autoenc_layer1.Lx_IN_data_cube);
     cv::imshow("L1 OUT cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
 
@@ -81,15 +83,17 @@ int main()
     printf("**********************\n");
     printf("\n");
     cnn_autoenc_layer2.k_sparse_sanity_check();
-    cv::imshow("Dictionary L2", cnn_autoenc_layer2.dictionary);
+    cnn_autoenc_layer2.copy_dictionary2visual_dict();
+   // cv::imshow("Dictionary L2", cnn_autoenc_layer2.dictionary);
+    cv::imshow("Visual dict L2", cnn_autoenc_layer2.visual_dict);
     cv::imshow("L2 IN cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
     cv::imshow("L2 OUT cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
 
     cv::waitKey(1);
     while(1)
     {
-       cnn_autoenc_layer1.train_encoder();
-
+   //    cnn_autoenc_layer1.train_encoder();
+cv::waitKey(1000);
     }
 
     return 0;
