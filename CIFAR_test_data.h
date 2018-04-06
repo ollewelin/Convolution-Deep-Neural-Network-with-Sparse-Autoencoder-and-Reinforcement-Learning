@@ -19,7 +19,7 @@ class CIFAR_test_data
         int CIFAR_width;///Output parameter
         int nr_of_CIFAR_file_bytes;///Output parameter. Filled with relevant value when a function call get_CIFAR_file_size() is done.
         char* CIFAR_data;
-        cv::Mat insert_L1_IN_convolution_cube;///Mat pointer Copied from Lx_IN_convolution_cube from first layer outside this class
+        cv::Mat insert_L1_IN_data_cube;///Mat pointer Copied from Lx_IN_convolution_cube from first layer outside this class
     protected:
 
     private:
