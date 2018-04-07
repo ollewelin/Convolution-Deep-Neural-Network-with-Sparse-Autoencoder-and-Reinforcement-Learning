@@ -13,7 +13,7 @@
 #include <iostream>
 using namespace std;
 const int MAX_DEPTH = 9999;
-const int ms_patch_show = 1000;
+const int ms_patch_show = 1;
 class sparse_autoenc
 {
 public:
@@ -108,7 +108,7 @@ void sparse_autoenc::copy_dictionary2visual_dict(void)
             {
                 dict_ROW = (patch_side_size * (i/sqrt_nodes_plus1)) + (k/(patch_side_size*dictionary.channels()));
                 dict_COL = ((i%sqrt_nodes_plus1) * patch_side_size * dictionary.channels()) + (k%(patch_side_size*dictionary.channels()));
-                visual_dict.at<float>(dict_ROW, dict_COL) = *index_ptr_dict;
+                visual_dict.at<float>(dict_ROW, dict_COL) = *index_ptr_dict + 0.5f;
                 index_ptr_dict++;///Direct is fast but no sanity check. Must have control over this pointer otherwise Segmentation Fault could occur.
             }
         }
@@ -127,7 +127,7 @@ void sparse_autoenc::copy_dictionary2visual_dict(void)
                 {
                     dict_ROW = (i * patch_side_size) + (k/patch_side_size);
                     dict_COL = (j * patch_side_size) + (k%patch_side_size);
-                    visual_dict.at<float>(dict_ROW, dict_COL) = *index_ptr_dict;
+                    visual_dict.at<float>(dict_ROW, dict_COL) = *index_ptr_dict + 0.5f;
                     index_ptr_dict++;///Direct is fast but no sanity check. Must have control over this pointer otherwise Segmentation Fault could occur.
                 }
             }
@@ -142,7 +142,46 @@ void sparse_autoenc::copy_visual_dict2dictionary(void)
 ///dictionary is Straight follow memory thats good for high speed Dot product operation.
 ///dictionary is organized in a long (long of many features choses) graphic column of patches.
 ///Therefor there is more suitable to show this dictionary data in a more square like image with several patches in both X and Y direction
+    int dict_ROW = 0;
+    int dict_COL = 0;
 
+    if(color_mode == 1)
+    {
+        ///COLOR mode the input depth is 1 with 3 COLOR
+        index_ptr_dict = zero_ptr_dict;
+        for(int i=0;i<Lx_OUT_depth;i++)
+        {
+            for(int k=0;k<patch_side_size*patch_side_size*dictionary.channels();k++)
+            {
+                dict_ROW = (patch_side_size * (i/sqrt_nodes_plus1)) + (k/(patch_side_size*dictionary.channels()));
+                dict_COL = ((i%sqrt_nodes_plus1) * patch_side_size * dictionary.channels()) + (k%(patch_side_size*dictionary.channels()));
+                *index_ptr_dict = visual_dict.at<float>(dict_ROW, dict_COL) - 0.5f;
+                index_ptr_dict++;///Direct is fast but no sanity check. Must have control over this pointer otherwise Segmentation Fault could occur.
+            }
+        }
+        ///Now we could check the sanity of index_ptr_dict pointer address
+        check_dictionary_ptr_patch();
+    }
+    else
+    {
+        ///GRAY mode the input depth is arbitrary
+        index_ptr_dict = zero_ptr_dict;
+        for(int i=0;i<Lx_OUT_depth;i++)
+        {
+            for(int j=0; j<Lx_IN_depth; j++)///IN depth is arbitrary in GRAY mode
+            {
+                for(int k=0; k<patch_side_size*patch_side_size*dictionary.channels(); k++)
+                {
+                    dict_ROW = (i * patch_side_size) + (k/patch_side_size);
+                    dict_COL = (j * patch_side_size) + (k%patch_side_size);
+                    *index_ptr_dict = visual_dict.at<float>(dict_ROW, dict_COL) - 0.5f;
+                    index_ptr_dict++;///Direct is fast but no sanity check. Must have control over this pointer otherwise Segmentation Fault could occur.
+                }
+            }
+        }
+        ///Now we could check the sanity of index_ptr_dict pointer address
+        check_dictionary_ptr_patch();
+    }
 }
 void sparse_autoenc::convolve_operation(void)
 {
@@ -151,50 +190,33 @@ void sparse_autoenc::convolve_operation(void)
 void sparse_autoenc::train_encoder(void)
 {
 ///TODO Change this to straight follow Mat dictionary operation
-/*
-
     int patch_row_offset=0;
     int patch_col_offset=0;
-
     patch_row_offset = (int) (rand() % (max_patch_h_offset +1));
     patch_col_offset = (int) (rand() % (max_patch_w_offset +1));
-
-    int data_in_ROW = 0;
-    int data_in_COL = 0;
-    int dict_ROW = 0;
-    int dict_COL = 0;
     float dot_product = 0.0f;
-    float dot_product_t = 0.0f;
-    int test=0;
-
     if(color_mode == 1)///When color mode there is another data access of the dictionary
     {
         ///COLOR dictionary access
+        index_ptr_dict         = zero_ptr_dict;///Set dictionary Mat pointer to start point
         for(int i=0; i<Lx_OUT_depth; i++)
         {
-            test=0;
-            index_ptr_dict         = zero_ptr_dict;///Set dictionary Mat pointer to start point
             ///Do the dot product (scalar product) of all the atom's in the dictionary with the input data on Lx_IN_data_cube
             dot_product = 0.0f;
-            dot_product_t = 0.0f;
             for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
             {
                 ///  = example_mat.at<float>(ROW, COLUMN);
-                data_in_ROW = (k/(patch_side_size*dictionary.channels())) + patch_row_offset;
-                data_in_COL = (k%(patch_side_size*dictionary.channels())) + patch_col_offset*dictionary.channels();
-                dict_ROW = (patch_side_size * (i/sqrt_nodes_plus1)) + (k/(patch_side_size*dictionary.channels()));
-                dict_COL = ((i%sqrt_nodes_plus1) * patch_side_size * dictionary.channels()) + (k%(patch_side_size*dictionary.channels()));
-                dot_product_t += Lx_IN_data_cube.at<float>(data_in_ROW, data_in_COL) * dictionary.at<float>(dict_ROW, dict_COL);
-                dot_product += Lx_IN_data_cube.at<float>(data_in_ROW, data_in_COL) * (*index_ptr_dict);
+                index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((patch_row_offset + k/(patch_side_size*dictionary.channels())) * (Lx_IN_widht * Lx_IN_data_cube.channels()) + (k%(patch_side_size*dictionary.channels())) + (patch_col_offset * Lx_IN_data_cube.channels()));
+                dot_product += (*index_ptr_Lx_IN_data) * (*index_ptr_dict);
                 if(show_patch_during_run == 1)///Only for debugging)
                 {
                     int eval_ROW = k/(patch_side_size*Lx_IN_data_cube.channels());
                     int eval_COL = k%(patch_side_size*Lx_IN_data_cube.channels());
-                    eval_indata_patch.at<float>(eval_ROW, eval_COL)   = Lx_IN_data_cube.at<float>(data_in_ROW, data_in_COL);
-                    eval_atom_patch.at<float>(eval_ROW, eval_COL)     = dictionary.at<float>(dict_ROW, dict_COL);
+                    eval_indata_patch.at<float>(eval_ROW, eval_COL)   = *index_ptr_Lx_IN_data;
+                    eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
                 }
+                //index_ptr_Lx_IN_data++;///
                 index_ptr_dict++;///
-                test++;
             }
             if(show_patch_during_run == 1)///Only for debugging)
             {
@@ -202,20 +224,16 @@ void sparse_autoenc::train_encoder(void)
                 imshow("eval_atom_patch", eval_atom_patch);
                 cv::waitKey(ms_patch_show);
             }
-            if(dot_product != dot_product_t)
-            {
-
-                printf("NOT EQUAL dot_product = %f dot_product_t = %f \n", dot_product, dot_product_t);
-                printf("test = %d\n", test);
-                exit(0);
-            }
             ///Put this dot product into Lx_OUT_convolution_cube for data place but in
             train_hidden_node[i] = dot_product;
+            index_ptr_Lx_OUT_conv = zero_ptr_Lx_OUT_conv + (i * Lx_OUT_widht * Lx_OUT_hight) + (patch_row_offset * Lx_OUT_widht) + (patch_col_offset);
+            *index_ptr_Lx_OUT_conv = dot_product;
         }
     }
     else
     {
         ///GRAY dictionary access
+        index_ptr_dict         = zero_ptr_dict;///Set dictionary Mat pointer to start point
         for(int i=0; i<Lx_OUT_depth; i++)
         {
             ///Do the dot product (scalar product) of all the atom's in the dictionary with the input data on Lx_IN_data_cube
@@ -224,19 +242,16 @@ void sparse_autoenc::train_encoder(void)
             {
                 for(int k=0; k<(patch_side_size*patch_side_size); k++)
                 {
-                    ///  = example_mat.at<float>(ROW, COLUMN);
-                    data_in_ROW = (k/patch_side_size) + patch_row_offset;
-                    data_in_COL = (k%patch_side_size) + patch_col_offset;
-                    dict_ROW = (i * patch_side_size) + (k/patch_side_size);
-                    dict_COL = (j * patch_side_size) + (k%patch_side_size);
-                    dot_product += Lx_IN_data_cube.at<float>(data_in_ROW, data_in_COL) * dictionary.at<float>(dict_ROW, dict_COL);
+                    index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((j * patch_side_size*patch_side_size) + ((patch_row_offset + k/patch_side_size) * Lx_IN_widht) + (k%patch_side_size) + (patch_col_offset));
+                    dot_product += (*index_ptr_Lx_IN_data) * (*index_ptr_dict);
                     if(show_patch_during_run == 1)///Only for debugging)
                     {
                         int eval_ROW = k/(patch_side_size);
                         int eval_COL = k%(patch_side_size);
-                        eval_indata_patch.at<float>(eval_ROW, eval_COL)   = Lx_IN_data_cube.at<float>(data_in_ROW, data_in_COL);
-                        eval_atom_patch.at<float>(eval_ROW, eval_COL)     = dictionary.at<float>(dict_ROW, dict_COL);
+                        eval_indata_patch.at<float>(eval_ROW, eval_COL)   = *index_ptr_Lx_IN_data;
+                        eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
                     }
+                    index_ptr_dict++;///
                 }
                 if(show_patch_during_run == 1)///Only for debugging)
                 {
@@ -247,9 +262,11 @@ void sparse_autoenc::train_encoder(void)
             }
             ///Put this dot product into Lx_OUT_convolution_cube for data place but in
             train_hidden_node[i] = dot_product;
+            index_ptr_Lx_OUT_conv = zero_ptr_Lx_OUT_conv + (i * Lx_OUT_widht * Lx_OUT_hight) + (patch_row_offset * Lx_OUT_widht) + (patch_col_offset);
+            *index_ptr_Lx_OUT_conv = dot_product;
         }
     }
-*/
+
     if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
     {
         ///Do sparse constraints
@@ -270,7 +287,7 @@ void sparse_autoenc::insert_patch_noise(void)
         noise = (float) (rand() % 65535) / 65536;///0..1.0 range
         noise -= 0.5;
         noise *= init_noise_gain;
-        noise += 0.5;
+     //   noise += 0.5;
 
         *index_ptr_dict = noise;
         index_ptr_dict++;///Direct is fast but no sanity check. Must have control over this pointer otherwise Segmentation Fault could occur.
@@ -288,7 +305,7 @@ void sparse_autoenc::check_dictionary_ptr_patch(void)
     }
     else
     {
-        printf("OK sanity_check_ptr = index_ptr_dict =%p\n", index_ptr_dict);
+   ///     printf("OK sanity_check_ptr = index_ptr_dict =%p\n", index_ptr_dict);
     }
 }
 void sparse_autoenc::init(void)
