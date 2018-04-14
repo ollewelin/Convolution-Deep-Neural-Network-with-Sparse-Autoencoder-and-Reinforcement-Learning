@@ -39,6 +39,12 @@ int main()
     cnn_autoenc_layer1.init_noise_gain     = 0.55f;///
     cnn_autoenc_layer1.enable_denoising    = 0;
     cnn_autoenc_layer1.denoising_percent   = 50;///0..100
+    cnn_autoenc_layer1.use_bias = 1;
+    cnn_autoenc_layer1.use_leak_relu = 1;
+    cnn_autoenc_layer1.use_variable_leak_relu = 1;
+    cnn_autoenc_layer1.min_relu_leak_gain = 0.01f;
+    cnn_autoenc_layer1.relu_leak_gain_variation = 0.05f;
+   // cnn_autoenc_layer1.fix_relu_leak_gain = 0.02f;
 
     printf("\n");
     printf("**********************\n");
@@ -75,6 +81,10 @@ int main()
     cnn_autoenc_layer2.init_noise_gain = 0.15f;///
     cnn_autoenc_layer2.enable_denoising = 0;
     cnn_autoenc_layer2.denoising_percent = 50;///0..100
+    cnn_autoenc_layer2.use_bias = 1;
+    cnn_autoenc_layer2.use_leak_relu = 1;
+    cnn_autoenc_layer2.use_variable_leak_relu = 0;
+    cnn_autoenc_layer2.fix_relu_leak_gain = 0.01;
 
     printf("\n");
     printf("**********************\n");
@@ -92,15 +102,15 @@ int main()
     cv::waitKey(1);
     while(1)
     {
-       cnn_autoenc_layer1.train_encoder();
-    cv::imshow("Visual dict L2", cnn_autoenc_layer2.visual_dict);
-    cv::imshow("L2 IN cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
-    cv::imshow("L2 OUT cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
-    cv::imshow("Visual dict L1", cnn_autoenc_layer1.visual_dict);
-    cv::imshow("L1 IN cube", cnn_autoenc_layer1.Lx_IN_data_cube);
-    cv::imshow("L1 OUT cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
-
-cv::waitKey(1);
+        cnn_autoenc_layer1.random_change_ReLU_leak_variable();
+        cnn_autoenc_layer1.train_encoder();
+        cv::imshow("Visual dict L2", cnn_autoenc_layer2.visual_dict);
+        cv::imshow("L2 IN cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
+        cv::imshow("L2 OUT cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
+        cv::imshow("Visual dict L1", cnn_autoenc_layer1.visual_dict);
+        cv::imshow("L1 IN cube", cnn_autoenc_layer1.Lx_IN_data_cube);
+        cv::imshow("L1 OUT cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
+        cv::waitKey(1);
     }
 
     return 0;
