@@ -30,6 +30,7 @@ public:
     void init(void);
     void train_encoder(void);
     int show_patch_during_run;///Only for evaluation/debugging
+    int show_encoder;
     void copy_visual_dict2dictionary(void);
     void copy_dictionary2visual_dict(void);
     float ReLU_function(float);
@@ -283,10 +284,11 @@ void sparse_autoenc::train_encoder(void)
     patch_col_offset = (int) (rand() % (max_patch_w_offset +1));
 
     float dot_product = 0.0f;
+    index_ptr_dict          = zero_ptr_dict;///Set dictionary Mat pointer to start point
+    index_ptr_encoder_input = zero_ptr_encoder_input;///
     if(color_mode == 1)///When color mode there is another data access of the dictionary
     {
         ///COLOR dictionary access
-        index_ptr_dict         = zero_ptr_dict;///Set dictionary Mat pointer to start point
         for(int i=0; i<Lx_OUT_depth; i++)
         {
             ///Do the dot product (scalar product) of all the atom's in the dictionary with the input data on Lx_IN_data_cube
@@ -304,6 +306,13 @@ void sparse_autoenc::train_encoder(void)
                     eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
                 }
                 index_ptr_dict++;///
+                ///=========== Copy over the input data to encoder_input =========
+                if(i==0)///Do this copy input data to encoder_input ones on Lx_OUT_depth 0, not for every Lx_OUT_depth turn
+                {
+                   *index_ptr_encoder_input = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder training below
+                   index_ptr_encoder_input++;
+                }
+                ///=========== End copy over the input data to encoder_input =====
             }
             if(use_bias == 1)
             {
@@ -326,7 +335,6 @@ void sparse_autoenc::train_encoder(void)
     else
     {
         ///GRAY dictionary access
-        index_ptr_dict         = zero_ptr_dict;///Set dictionary Mat pointer to start point
         for(int i=0; i<Lx_OUT_depth; i++)
         {
             ///Do the dot product (scalar product) of all the atom's in the dictionary with the input data on Lx_IN_data_cube
@@ -345,6 +353,13 @@ void sparse_autoenc::train_encoder(void)
                         eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
                     }
                     index_ptr_dict++;///
+                    ///=========== Copy over the input data to encoder_input =========
+                    if(i==0)///Do this copy input data to encoder_input ones on Lx_OUT_depth 0, not for every Lx_OUT_depth turn
+                    {
+                        *index_ptr_encoder_input = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder training below
+                        index_ptr_encoder_input++;
+                    }
+                    ///=========== End copy over the input data to encoder_input =====
                 }
                 if(show_patch_during_run == 1)///Only for debugging)
                 {
@@ -364,6 +379,11 @@ void sparse_autoenc::train_encoder(void)
             *index_ptr_Lx_OUT_conv = dot_product;
         }
     }
+    if(show_encoder==1)
+    {
+        imshow("encoder_input", encoder_input);
+    }
+
     total_loss = 0.0f;///Clear
     if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
     {

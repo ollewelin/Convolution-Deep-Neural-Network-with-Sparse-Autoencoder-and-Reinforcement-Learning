@@ -26,6 +26,7 @@ int main()
 
 
     cnn_autoenc_layer1.show_patch_during_run = 1;///Only for debugging
+    cnn_autoenc_layer1.show_encoder = 1;
     cnn_autoenc_layer1.init_in_from_outside = 0;///When init_in_from_outside = 1 then Lx_IN_data_cube is same poiner as the Lx_OUT_convolution_cube of the previous layer
     cnn_autoenc_layer1.color_mode          = 1;///color_mode = 1 is ONLY allowed to use at Layer 1
     cnn_autoenc_layer1.patch_side_size     = 11;
@@ -63,6 +64,7 @@ int main()
    /// cv::imshow("L1 OUT cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
 
     cnn_autoenc_layer2.show_patch_during_run = 0;///Only for debugging
+    cnn_autoenc_layer2.show_encoder = 0;
     cnn_autoenc_layer2.Lx_IN_data_cube = cnn_autoenc_layer1.Lx_OUT_convolution_cube;///Pointer are copy NOT copy the physical memory. Copy physical memory is not good solution here.
     cnn_autoenc_layer2.init_in_from_outside       = 1;///When init_in_from_outside = 1 then Lx_IN_data_cube is same poiner as the Lx_OUT_convolution_cube of the previous layer
     cnn_autoenc_layer2.color_mode      = 0;///color_mode = 1 is ONLY allowed to use at Layer 1
