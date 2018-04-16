@@ -115,6 +115,10 @@ private:
     float *zero_ptr_Lx_OUT_conv;///Set up pointer for fast direct address of Mat
     float *index_ptr_Lx_OUT_conv;///Set up pointer for fast direct address of Mat
     float *sanity_check_ptr;///Only for test
+    float *zero_ptr_encoder_input;///Set up pointer for fast direct address of Mat
+    float *index_ptr_encoder_input;///Set up pointer for fast direct address of Mat
+    float *zero_ptr_denoised_enc;///Set up pointer for fast direct address of Mat
+    float *index_ptr_denoised_enc;///Set up pointer for fast direct address of Mat
     float *zero_ptr_reconstruct;///Set up pointer for fast direct address of Mat
     float *index_ptr_reconstruct;///Set up pointer for fast direct address of Mat
     ///=================================================================================
@@ -360,7 +364,6 @@ void sparse_autoenc::train_encoder(void)
             *index_ptr_Lx_OUT_conv = dot_product;
         }
     }
-
     total_loss = 0.0f;///Clear
     if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
     {
@@ -416,14 +419,12 @@ void sparse_autoenc::train_encoder(void)
             ///-- ReLU --
             train_hidden_node[ (score_table[i]) ] = ReLU_function(train_hidden_node[ (score_table[i]) ]);///Do ReLU only on selected active hidden nodes
             ///----------
-
             /// ======= Only for evaluation =========
             if(ON_OFF_print_score == 1)
             {
                 printf(" i = %d hidden_node[%d] = %f\n", i, (score_table[i]), train_hidden_node[ (score_table[i]) ]);
             }
             /// ======= End evaluation ===========
-            ///--- ReLU complete ---
 
             ///Train selected atom's procedure
             ///Step 1. Make reconstruction
@@ -618,7 +619,6 @@ void sparse_autoenc::init(void)
         visual_activation.create(v_dict_hight, v_dict_width, CV_32FC3);///Show activation overlay marking on each patch.
         visual_dict = cv::Scalar(0.5f, 0.5f, 0.5f);
         visual_activation = cv::Scalar(0.5f, 0.5f, 0.5f);
-
         if(Lx_IN_depth != 1)
         {
             printf("********\n");
@@ -630,6 +630,9 @@ void sparse_autoenc::init(void)
             printf("Lx_IN_depth = %d\n", Lx_IN_depth );
             printf("********\n");
         }
+        encoder_input.create     (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC3);
+        denoised_enc_input.create(patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC3);
+        reconstruct.create       (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC3);
         printf("This layer First Layer init_in_from_outside = %d\n", init_in_from_outside);
         Lx_IN_data_cube.create(Lx_IN_hight, Lx_IN_widht, CV_32FC3);
         printf("Lx_IN_data_cube are now created in COLOR mode CV_32FC3\n");
@@ -662,6 +665,9 @@ void sparse_autoenc::init(void)
         visual_activation.create(v_dict_hight, v_dict_width, CV_32FC3);/// Color only for show activation overlay marking on the gray (green overlay)
         visual_dict = cv::Scalar(0.5f);
         visual_activation = cv::Scalar(0.5f, 0.5f, 0.5f);
+        encoder_input.create     (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC1);
+        denoised_enc_input.create(patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC1);
+        reconstruct.create       (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC1);
         if(init_in_from_outside == 1)
         {
             printf("This layer is a init_in_from_outside = %d\n", init_in_from_outside);
@@ -746,7 +752,7 @@ void sparse_autoenc::init(void)
         printf("so if Lx_IN/OUT_depth is large the image of IN/OUT_cube will go below the screen\n");
         printf("enable_denoising = %d\n", enable_denoising);
     }
-    ///======== Set up pointers for Mat direct address (fastest operation) =============
+    ///======== Set up pointers for Mat direct address (fastest Mat access operation) =============
     zero_ptr_dict          = dictionary.ptr<float>(0);///Set up pointer for fast direct address of Mat
     index_ptr_dict         = zero_ptr_dict;///Set up pointer for fast direct address of Mat
     zero_ptr_vis_act       = visual_activation.ptr<float>(0);///Set up pointer for fast direct address of Mat
@@ -755,6 +761,12 @@ void sparse_autoenc::init(void)
     index_ptr_Lx_IN_data   = zero_ptr_Lx_IN_data;///Set up pointer for fast direct address of Mat
     zero_ptr_Lx_OUT_conv   = Lx_OUT_convolution_cube.ptr<float>(0);///Set up pointer for fast direct address of Mat
     index_ptr_Lx_OUT_conv  = zero_ptr_Lx_OUT_conv;///Set up pointer for fast direct address of Mat
+    zero_ptr_encoder_input  = encoder_input.ptr<float>(0);///Set up pointer for fast direct address of Mat
+    index_ptr_encoder_input = zero_ptr_encoder_input;///Set up pointer for fast direct address of Mat
+    zero_ptr_denoised_enc  = denoised_enc_input.ptr<float>(0);///Set up pointer for fast direct address of Mat
+    index_ptr_denoised_enc = zero_ptr_denoised_enc;///Set up pointer for fast direct address of Mat
+    zero_ptr_reconstruct   = reconstruct.ptr<float>(0);///Set up pointer for fast direct address of Mat
+    index_ptr_reconstruct  = zero_ptr_reconstruct;///Set up pointer for fast direct address of Mat
     ///=================================================================================
     if(color_mode == 1)
     {
