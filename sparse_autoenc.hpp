@@ -16,8 +16,8 @@ const int MAX_DEPTH = 9999;
 
 /// ======== Things for evaluation only ==========
 const int ms_patch_show = 1;
-int pause_score_print_ms = 5000;
-int ON_OFF_print_score = 1;
+int pause_score_print_ms = 1000;
+int ON_OFF_print_score = 0;
 int print_variable_relu_leak = 1;
 /// ==============================================
 
@@ -26,11 +26,10 @@ class sparse_autoenc
 public:
     sparse_autoenc() {}
     virtual ~sparse_autoenc() {}
+    int layer_nr;
     void init(void);
     void train_encoder(void);
     int show_patch_during_run;///Only for evaluation/debugging
-    cv::Mat eval_indata_patch;
-    cv::Mat eval_atom_patch;
     void copy_visual_dict2dictionary(void);
     void copy_dictionary2visual_dict(void);
     float ReLU_function(float);
@@ -67,6 +66,7 @@ public:
     int use_variable_leak_relu;///it = 1 Advanced Leak ReLU function with stochastic negative leak
     float relu_leak_gain_variation;///used when use_variable_leak_relu = 1. relu_leak_gain_variation + min_relu_leak_gain must bee <1.0f
     float min_relu_leak_gain;///used when use_variable_leak_relu = 1.
+    float score_bottom_level;///Should be 0.0f or less. Start bottom level of score table. This is forced to 0.0f when use_leak_relu = 0
     ///-----------------------------
 
     ///--- This 2 parameters below is the Stop condition parameters to use more atom's. ----
@@ -100,6 +100,11 @@ private:
     int max_patch_w_offset;
     float *train_hidden_node;///Only used in train_encoder() function
     float *train_hidden_deleted_max;///Same size as train_hidden_node but erase all max value when fill score table
+    cv::Mat encoder_input;///depth Z = Lx_IN_depth. layer size X, Y = patch_size * patch_size
+    cv::Mat denoised_enc_input;///same size as encoder_input. Only used when enable_denoising = 1;
+    cv::Mat reconstruct;///same size as encoder_input
+    cv::Mat eval_indata_patch;
+    cv::Mat eval_atom_patch;
     ///======== Set up pointers for Mat direct address (fastest operation) =============
     float *zero_ptr_dict;///Set up pointer for fast direct address of Mat
     float *index_ptr_dict;///Set up pointer for fast direct address of Mat
@@ -110,13 +115,17 @@ private:
     float *zero_ptr_Lx_OUT_conv;///Set up pointer for fast direct address of Mat
     float *index_ptr_Lx_OUT_conv;///Set up pointer for fast direct address of Mat
     float *sanity_check_ptr;///Only for test
+    float *zero_ptr_reconstruct;///Set up pointer for fast direct address of Mat
+    float *index_ptr_reconstruct;///Set up pointer for fast direct address of Mat
     ///=================================================================================
     void insert_patch_noise(void);
     void check_dictionary_ptr_patch(void);
+    float total_loss;
+    float get_noise(void);
 };
-float sparse_autoenc::ReLU_function(float input_value)
+inline float sparse_autoenc::ReLU_function(float input_value)
 {
-    float ReLU_result;
+    float ReLU_result = 0.0f;
     if(input_value < 0.0f)
     {
         if(use_leak_relu == 1)
@@ -125,12 +134,12 @@ float sparse_autoenc::ReLU_function(float input_value)
             if(use_variable_leak_relu == 1)
             {
                 ///stochastic changed 0.0< to <1.0 leak parameter used
-                ReLU_result *= ReLU_result * variable_relu_leak;
+                ReLU_result = input_value * variable_relu_leak;
             }
             else
             {
                 ///Fix leak leak parameter used
-                ReLU_result *= ReLU_result * fix_relu_leak_gain;
+                ReLU_result = input_value * fix_relu_leak_gain;
 
             }
         }
@@ -268,6 +277,7 @@ void sparse_autoenc::train_encoder(void)
     int patch_col_offset=0;///This will point where the start left column of the part of input data how will be dot product with the patch
     patch_row_offset = (int) (rand() % (max_patch_h_offset +1));///Randomize a start row of where input data patch will dot product with patch.
     patch_col_offset = (int) (rand() % (max_patch_w_offset +1));
+
     float dot_product = 0.0f;
     if(color_mode == 1)///When color mode there is another data access of the dictionary
     {
@@ -298,8 +308,8 @@ void sparse_autoenc::train_encoder(void)
 
             if(show_patch_during_run == 1)///Only for debugging)
             {
-                imshow("eval_indata_patch", eval_indata_patch);
-                imshow("eval_atom_patch", eval_atom_patch);
+                imshow("patch", eval_indata_patch);
+                imshow("atom", eval_atom_patch);
                 cv::waitKey(ms_patch_show);
             }
             ///Put this dot product into Lx_OUT_convolution_cube for data place but in
@@ -334,8 +344,8 @@ void sparse_autoenc::train_encoder(void)
                 }
                 if(show_patch_during_run == 1)///Only for debugging)
                 {
-                    imshow("eval_indata_patch", eval_indata_patch);
-                    imshow("eval_atom_patch", eval_atom_patch);
+                    imshow("patch", eval_indata_patch);
+                    imshow("atom", eval_atom_patch);
                     cv::waitKey(ms_patch_show);
                 }
             }
@@ -351,6 +361,7 @@ void sparse_autoenc::train_encoder(void)
         }
     }
 
+    total_loss = 0.0f;///Clear
     if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
     {
         for(int i=0; i<Lx_OUT_depth; i++) ///-1 tell that this will not used
@@ -361,12 +372,12 @@ void sparse_autoenc::train_encoder(void)
         ///Make the score table, select out by score on order the K_sparse strongest atom's of the dictionary
         for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's
         {
-            float max_temp = 0.0f;
+            float max_temp = score_bottom_level;
             for(int j=0;j<Lx_OUT_depth;j++)
             {
-                if(max_temp < train_hidden_deleted_max[j])
+                if(max_temp < (train_hidden_deleted_max[j]))
                 {
-                    max_temp = train_hidden_deleted_max[j];
+                    max_temp = (train_hidden_deleted_max[j]);
                     score_table[i] = j;
                 }
             }
@@ -393,13 +404,57 @@ void sparse_autoenc::train_encoder(void)
         }
         /// ======= End evaluation ===========
 
-        ///Do ReLU non linear activation function of hidden nodes
-       // xxx = ReLU_function(xxxx);
-        ///Train selected atom's
-        ///Step 1. Make reconstruction
-        ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-        ///Step 3. Update patch weights (and bias weights also)
+        ///--- Do ReLU non linear activation function of hidden nodes
+        for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's and do ReLU non linear activation function of hidden nodes
+        {
+            if((score_table[i]) == -1)///Break if the score table tell that the atom's in use is less then up to K_sparse
+            {
+                break;///atom's in use this time is fewer then K_sparse
+                ///Note this break event will probably never happen if score_bottom_level is set to something less then 0.0f
+            }
 
+            ///-- ReLU --
+            train_hidden_node[ (score_table[i]) ] = ReLU_function(train_hidden_node[ (score_table[i]) ]);///Do ReLU only on selected active hidden nodes
+            ///----------
+
+            /// ======= Only for evaluation =========
+            if(ON_OFF_print_score == 1)
+            {
+                printf(" i = %d hidden_node[%d] = %f\n", i, (score_table[i]), train_hidden_node[ (score_table[i]) ]);
+            }
+            /// ======= End evaluation ===========
+            ///--- ReLU complete ---
+
+            ///Train selected atom's procedure
+            ///Step 1. Make reconstruction
+            ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+            ///Step 3. Update patch weights (and bias weights also)
+
+            ///============================================================
+            ///Step 1. Make reconstruction
+            ///============================================================
+
+            ///============================================================
+            ///Step 1. complete
+            ///============================================================
+
+            ///============================================================
+            ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+            ///============================================================
+
+            ///============================================================
+            ///Step 2. complete
+            ///============================================================
+
+            ///============================================================
+            ///Step 3. Update patch weights (and bias weights also)
+            ///============================================================
+
+            ///============================================================
+            ///Step 3. complete
+            ///============================================================
+
+        }
 
     }
     else
@@ -407,8 +462,41 @@ void sparse_autoenc::train_encoder(void)
         ///Not in sparse mode. No sparse constraints this mean's that all atom's in dictionary will be used to represent the reconstruction
         ///and all atom's will also be trained every cycle.
 
+        for(int i=0; i<Lx_OUT_depth; i++) ///Go through all atom's
+        {
+            train_hidden_node[i] = ReLU_function(train_hidden_node[i]);///ReLU
+            ///Train selected atom's
+            ///Step 1. Make reconstruction
+            ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+            ///Step 3. Update patch weights (and bias weights also)
+
+            ///============================================================
+            ///Step 1. Make reconstruction
+            ///============================================================
+
+            ///============================================================
+            ///Step 1. complete
+            ///============================================================
+
+            ///============================================================
+            ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+            ///============================================================
+
+            ///============================================================
+            ///Step 2. complete
+            ///============================================================
+
+            ///============================================================
+            ///Step 3. Update patch weights (and bias weights also)
+            ///============================================================
+
+            ///============================================================
+            ///Step 3. complete
+            ///============================================================
+        }
     }
     convolution_mode = 0;
+
 }
 
 void sparse_autoenc::insert_patch_noise(void)
@@ -425,6 +513,16 @@ void sparse_autoenc::insert_patch_noise(void)
         index_ptr_dict++;///Direct is fast but no sanity check. Must have control over this pointer otherwise Segmentation Fault could occur.
     }
 }
+float sparse_autoenc::get_noise(void)
+{
+    float noise=0.0f;
+    noise = (float) (rand() % 65535) / 65536;///0..1.0 range
+    noise -= 0.5;
+    noise *= init_noise_gain;
+    return noise;
+}
+
+
 void sparse_autoenc::check_dictionary_ptr_patch(void)
 {
     sanity_check_ptr = zero_ptr_dict + (dictionary.rows * dictionary.cols * dictionary.channels());
@@ -442,6 +540,18 @@ void sparse_autoenc::check_dictionary_ptr_patch(void)
 }
 void sparse_autoenc::init(void)
 {
+    srand (static_cast <unsigned> (time(0)));///Seed the randomizer
+    printf("\n");
+    printf("*** Parameter settings of ***\n");
+    printf("Layer_nr = %d\n", layer_nr);
+    printf("*****************************\n");
+
+    if(layer_nr < 1 || layer_nr > 99)
+    {
+        printf("ERROR! layer_nr = %d is out of range 1..99\n", layer_nr);
+        exit(0);
+    }
+
     if(Lx_OUT_depth < 1)
     {
         printf("ERROR! Lx_OUT_depth = %d < 1\n", Lx_OUT_depth);
@@ -526,8 +636,19 @@ void sparse_autoenc::init(void)
         if(use_bias == 1)
         {
             bias_hid2out.create(patch_side_size, patch_side_size, CV_32FC3);
+            for(int i=0;i<patch_side_size;i++)
+            {
+                for(int j=0;j<patch_side_size*3;j++)
+                {
+                    bias_hid2out.at<float>(i,j) = get_noise();
+                }
+            }
             printf("bias_hid2out are now created in COLOR mode CV_32FC3\n");
             bias_in2hid.create(Lx_OUT_depth, 1, CV_32FC1);
+            for(int i=0;i<Lx_OUT_depth;i++)
+            {
+                bias_in2hid.at<float>(i, 0) = get_noise();
+            }
         }
     }
     else
@@ -558,13 +679,24 @@ void sparse_autoenc::init(void)
         if(use_bias == 1)
         {
             bias_hid2out.create(patch_side_size, patch_side_size, CV_32FC1);
+            for(int i=0;i<patch_side_size;i++)
+            {
+                for(int j=0;j<patch_side_size;j++)
+                {
+                    bias_hid2out.at<float>(i,j) = get_noise();
+                }
+            }
             printf("bias_hid2out are now created in GRAY mode CV_32FC1\n");
             bias_in2hid.create(Lx_OUT_depth, 1, CV_32FC1);
+            for(int i=0;i<Lx_OUT_depth;i++)
+            {
+                bias_in2hid.at<float>(i, 0) = get_noise();
+            }
         }
         if(show_patch_during_run == 1)///Only for debugging)
         {
-            eval_indata_patch.create(patch_side_size, patch_side_size, CV_32FC3);
-            eval_atom_patch.create(patch_side_size, patch_side_size, CV_32FC3);
+            eval_indata_patch.create(patch_side_size, patch_side_size, CV_32FC1);
+            eval_atom_patch.create(patch_side_size, patch_side_size, CV_32FC1);
         }
 
     }
@@ -596,8 +728,8 @@ void sparse_autoenc::init(void)
         printf("Error Lx_OUT_hight = %d to small\n", Lx_OUT_hight);
         exit(0);
     }
-    max_patch_h_offset = (Lx_IN_hight / stride) - patch_side_size;///Fix bug 2018-04-16 .../ stride) was missed
-    max_patch_w_offset = (Lx_IN_widht / stride) - patch_side_size;///Fix bug 2018-04-16 .../ stride) was missed
+    max_patch_h_offset = (Lx_IN_hight - patch_side_size) / stride;
+    max_patch_w_offset = (Lx_IN_widht - patch_side_size) / stride;
     printf("max_patch_h_offset = %d\n", max_patch_h_offset);
     printf("max_patch_w_offset = %d\n", max_patch_w_offset);
 
@@ -624,7 +756,6 @@ void sparse_autoenc::init(void)
     zero_ptr_Lx_OUT_conv   = Lx_OUT_convolution_cube.ptr<float>(0);///Set up pointer for fast direct address of Mat
     index_ptr_Lx_OUT_conv  = zero_ptr_Lx_OUT_conv;///Set up pointer for fast direct address of Mat
     ///=================================================================================
-    srand (static_cast <unsigned> (time(0)));///Seed the randomizer
     if(color_mode == 1)
     {
         ///COLOR mode the input depth is 1 with 3 COLOR
@@ -692,8 +823,16 @@ void sparse_autoenc::init(void)
             }
             ///END Check fix_relu_leak_gain parameter
         }
+        float min_score_b_level = -100000.0f;
+        if(score_bottom_level > 0.0f || score_bottom_level < min_score_b_level)
+        {
+            printf("WARNING! score_bottom_level = %f should be in range 0.0f to %f\n", score_bottom_level, min_score_b_level);
+        }
+     }
+    else
+    {
+        score_bottom_level = 0.0f;
     }
-
     printf("Init CNN layer object Done!\n");
 }
 
@@ -717,6 +856,12 @@ void sparse_autoenc::k_sparse_sanity_check(void)
     }
     ///============= End K_sparse sanity check =============
     //printf("K_sparse OK = %d\n", K_sparse);
+
+    printf("*** END settings of *********\n");
+    printf("Layer_nr = %d\n", layer_nr);
+    printf("*****************************\n");
+    printf("\n");
+
 }
 
 
