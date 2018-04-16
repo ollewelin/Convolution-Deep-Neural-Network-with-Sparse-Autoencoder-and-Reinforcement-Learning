@@ -596,8 +596,8 @@ void sparse_autoenc::init(void)
         printf("Error Lx_OUT_hight = %d to small\n", Lx_OUT_hight);
         exit(0);
     }
-    max_patch_h_offset = Lx_IN_hight - patch_side_size;
-    max_patch_w_offset = Lx_IN_widht - patch_side_size;
+    max_patch_h_offset = (Lx_IN_hight / stride) - patch_side_size;///Fix bug 2018-04-16 .../ stride) was missed
+    max_patch_w_offset = (Lx_IN_widht / stride) - patch_side_size;///Fix bug 2018-04-16 .../ stride) was missed
     printf("max_patch_h_offset = %d\n", max_patch_h_offset);
     printf("max_patch_w_offset = %d\n", max_patch_w_offset);
 
