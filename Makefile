@@ -3,7 +3,7 @@
 
 CC = g++
 CFLAGS = -g -Wall
-SRCS = main.cpp CIFAR_test_data.cpp
+SRCS = main.cpp sparse_autoenc.hpp CIFAR_test_data.cpp CIFAR_test_data.h
 PROG = OW_CNN_R
 
 OPENCV = `pkg-config opencv --cflags --libs`
