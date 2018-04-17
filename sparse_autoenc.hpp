@@ -55,7 +55,7 @@ public:
     int Lx_OUT_hight;///Output parameter how high will the Lx_OUT_convolution_cube be. Depend on patch_side_side and Lx_IN_hight
     ///No padding option implemented
     ///Pooling layer is outside this class
-    cv::Mat dictionary;///Straight follow memory of dictionary
+    cv::Mat dictionary;///Straight follow Boxes Downwards memory of dictionary
     cv::Mat visual_dict;///Visual organization of the Mat dictionary
     cv::Mat visual_activation;///Same as visual_dict Mat but add on a activation visualization on top of the image.
     float init_noise_gain;
@@ -182,7 +182,7 @@ void sparse_autoenc::copy_dictionary2visual_dict(void)
 {
 ///Why is this need ?..
 ///dictionary is Straight follow memory that is good for high speed Dot product operation.
-///dictionary is organized in a long (long of many features choses) graphic column of patches.
+///dictionary is organized in a long (long of many features choses) graphic row of patches.
 ///Therefor there it is more suitable to show this dictionary data in a more square like image with several patches in both X and Y direction
     int dict_ROW = 0;
     int dict_COL = 0;
@@ -197,6 +197,7 @@ void sparse_autoenc::copy_dictionary2visual_dict(void)
             {
                 dict_ROW = (patch_side_size * (i/sqrt_nodes_plus1)) + (k/(patch_side_size*dictionary.channels()));
                 dict_COL = ((i%sqrt_nodes_plus1) * patch_side_size * dictionary.channels()) + (k%(patch_side_size*dictionary.channels()));
+
                 visual_dict.at<float>(dict_ROW, dict_COL) = *index_ptr_dict + 0.5f;
                 index_ptr_dict++;///Direct is fast but no sanity check. Must have control over this pointer otherwise Segmentation Fault could occur.
             }
@@ -214,8 +215,8 @@ void sparse_autoenc::copy_dictionary2visual_dict(void)
             {
                 for(int k=0; k<patch_side_size*patch_side_size*dictionary.channels(); k++)
                 {
-                    dict_ROW = (i * patch_side_size) + (k/patch_side_size);
-                    dict_COL = (j * patch_side_size) + (k%patch_side_size);
+                    dict_ROW = (j * patch_side_size) + (k/patch_side_size);
+                    dict_COL = (i * patch_side_size) + (k%patch_side_size);
                     visual_dict.at<float>(dict_ROW, dict_COL) = *index_ptr_dict + 0.5f;
                     index_ptr_dict++;///Direct is fast but no sanity check. Must have control over this pointer otherwise Segmentation Fault could occur.
                 }
@@ -261,8 +262,8 @@ void sparse_autoenc::copy_visual_dict2dictionary(void)
             {
                 for(int k=0; k<patch_side_size*patch_side_size*dictionary.channels(); k++)
                 {
-                    dict_ROW = (i * patch_side_size) + (k/patch_side_size);
-                    dict_COL = (j * patch_side_size) + (k%patch_side_size);
+                    dict_ROW = (j * patch_side_size) + (k/patch_side_size);
+                    dict_COL = (i * patch_side_size) + (k%patch_side_size);
                     *index_ptr_dict = visual_dict.at<float>(dict_ROW, dict_COL) - 0.5f;
                     index_ptr_dict++;///Direct is fast but no sanity check. Must have control over this pointer otherwise Segmentation Fault could occur.
                 }
@@ -295,7 +296,6 @@ void sparse_autoenc::train_encoder(void)
             dot_product = 0.0f;
             for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
             {
-                ///  = example_mat.at<float>(ROW, COLUMN);
                 index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((patch_row_offset + k/(patch_side_size*dictionary.channels())) * (Lx_IN_widht * Lx_IN_data_cube.channels()) + (k%(patch_side_size*dictionary.channels())) + (patch_col_offset * Lx_IN_data_cube.channels()));
                 dot_product += (*index_ptr_Lx_IN_data) * (*index_ptr_dict);
                 if(show_patch_during_run == 1)///Only for debugging)
@@ -678,8 +678,8 @@ void sparse_autoenc::init(void)
     {
         ///Gray mode now a deep mode is used instead with number of deep layers
         ///This graphical setup consist of many small patches (boxes) with many (boxes) rows.
-        v_dict_hight = patch_side_size * Lx_OUT_depth;///Each patches (boxes) row correspond to one encode node
-        v_dict_width = patch_side_size * Lx_IN_depth;///Each column of small patches (boxes) correspond to each depth level.
+        v_dict_hight = patch_side_size * Lx_IN_depth;///Each patches (boxes) row correspond to each LxIN depth level.
+        v_dict_width = patch_side_size * Lx_OUT_depth;///Each column of small patches (boxes) correspond to each encode node = each Lx OUT depth.
         dictionary.create(patch_side_size * Lx_IN_depth * Lx_OUT_depth, patch_side_size, CV_32FC1);///The first atom is one box patch_side_size X patch_side_size in COLOR. the second atom is in box below the the first atom then it fit Dot product better then the visual_dict layout
         visual_dict.create(v_dict_hight, v_dict_width, CV_32FC1);///Only gray
         visual_activation.create(v_dict_hight, v_dict_width, CV_32FC3);/// Color only for show activation overlay marking on the gray (green overlay)
