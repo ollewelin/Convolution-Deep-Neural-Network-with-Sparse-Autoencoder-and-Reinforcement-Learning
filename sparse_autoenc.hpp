@@ -46,8 +46,6 @@ public:
     int Lx_OUT_depth;///This is the number of atom's in the whole dictionary.
     cv::Mat Lx_IN_data_cube;///The input convolution cube. Pick a spatial patch data from this Input Convolution cube when learning autoencoder
     cv::Mat Lx_OUT_convolution_cube;///The output convolution cube. one point in this data is one encoder node output data
-    cv::Mat bias_in2hid;
-    cv::Mat bias_hid2out;
     int stride;///Convolution stride level
     int Lx_IN_widht;///Input parameter how wide will the Lx_IN_data_cube be.
     int Lx_IN_hight;///Input parameter how high will the Lx_IN_data_cube be.
@@ -58,6 +56,13 @@ public:
     cv::Mat dictionary;///Straight follow Boxes Downwards memory of dictionary
     cv::Mat visual_dict;///Visual organization of the Mat dictionary
     cv::Mat visual_activation;///Same as visual_dict Mat but add on a activation visualization on top of the image.
+    cv::Mat encoder_input;///depth Z = Lx_IN_depth. layer size X, Y = patch_size * patch_size
+    cv::Mat denoised_enc_input;///same size as encoder_input. Only used when enable_denoising = 1;
+    cv::Mat reconstruct;///same size as encoder_input
+    cv::Mat eval_indata_patch;
+    cv::Mat eval_atom_patch;
+    cv::Mat bias_in2hid;
+    cv::Mat bias_hid2out;
     float init_noise_gain;
 
     ///Regarding ReLU Leak function
@@ -101,11 +106,7 @@ private:
     int max_patch_w_offset;
     float *train_hidden_node;///Only used in train_encoder() function
     float *train_hidden_deleted_max;///Same size as train_hidden_node but erase all max value when fill score table
-    cv::Mat encoder_input;///depth Z = Lx_IN_depth. layer size X, Y = patch_size * patch_size
-    cv::Mat denoised_enc_input;///same size as encoder_input. Only used when enable_denoising = 1;
-    cv::Mat reconstruct;///same size as encoder_input
-    cv::Mat eval_indata_patch;
-    cv::Mat eval_atom_patch;
+    float *hidden_delta;///This is need for training bias_in2hid weights
     ///======== Set up pointers for Mat direct address (fastest operation) =============
     float *zero_ptr_dict;///Set up pointer for fast direct address of Mat
     float *index_ptr_dict;///Set up pointer for fast direct address of Mat
@@ -427,7 +428,21 @@ void sparse_autoenc::train_encoder(void)
         }
         /// ======= End evaluation ===========
 
-        ///--- Do ReLU non linear activation function of hidden nodes
+        if(color_mode==1)
+        {
+            reconstruct = cv::Scalar(0.5f, 0.5f, 0.5f);///Start with a neutral (gray) image
+        }
+        else
+        {
+            reconstruct = cv::Scalar(0.5f);///Start with a neutral (gray) image
+        }
+
+        ///Add bias signal to reconstruction
+        if(use_bias==1)
+        {
+            reconstruct += bias_hid2out;
+        }
+
         for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's and do ReLU non linear activation function of hidden nodes
         {
             if((score_table[i]) == -1)///Break if the score table tell that the atom's in use is less then up to K_sparse
@@ -436,6 +451,7 @@ void sparse_autoenc::train_encoder(void)
                 ///Note this break event will probably never happen if score_bottom_level is set to something less then 0.0f
             }
 
+            ///--- Do ReLU non linear activation function of hidden nodes
             ///-- ReLU --
             train_hidden_node[ (score_table[i]) ] = ReLU_function(train_hidden_node[ (score_table[i]) ]);///Do ReLU only on selected active hidden nodes
             ///----------
@@ -454,7 +470,25 @@ void sparse_autoenc::train_encoder(void)
             ///============================================================
             ///Step 1. Make reconstruction
             ///============================================================
+            index_ptr_reconstruct = zero_ptr_reconstruct;
+            if(color_mode==1)
+            {
+                int dict_start_ROW = ((score_table[i]) / sqrt_nodes_plus1) * patch_side_size*patch_side_size*dictionary.channels();
+                int dict_start_COL = ((score_table[i]) % sqrt_nodes_plus1) * patch_side_size*dictionary.channels();
+                for(int j=0; j<Lx_IN_depth; j++)
+                {
+                    for(int k=0; k<patch_side_size*patch_side_size*reconstruct.channels(); k++)
+                    {
+                        index_ptr_dict = zero_ptr_dict + dict_start_ROW + dict_start_COL + ((k/(patch_side_size*reconstruct.channels())) * sqrt_nodes_plus1 * patch_side_size * dictionary.channels()) + k%(patch_side_size*reconstruct.channels());
+                        *index_ptr_reconstruct += train_hidden_node[(score_table[i])] * (*index_ptr_dict);
+                        index_ptr_reconstruct++;
+                    }
+                }
+            }
+            else
+            {
 
+            }
             ///============================================================
             ///Step 1. complete
             ///============================================================
@@ -704,12 +738,16 @@ void sparse_autoenc::init(void)
         }
         if(use_bias == 1)
         {
-            bias_hid2out.create(patch_side_size, patch_side_size, CV_32FC1);
-            for(int i=0;i<patch_side_size;i++)
+            hidden_delta = new float[Lx_OUT_depth];///Need for training bias_in2hid weight's
+            bias_hid2out.create(patch_side_size  * Lx_IN_depth, patch_side_size, CV_32FC1);
+            for(int h=0; h<Lx_IN_depth; h++)
             {
-                for(int j=0;j<patch_side_size;j++)
+                for(int i=0; i<patch_side_size; i++)
                 {
-                    bias_hid2out.at<float>(i,j) = get_noise();
+                    for(int j=0; j<patch_side_size; j++)
+                    {
+                        bias_hid2out.at<float>(h*patch_side_size*patch_side_size + i,j) = get_noise();
+                    }
                 }
             }
             printf("bias_hid2out are now created in GRAY mode CV_32FC1\n");

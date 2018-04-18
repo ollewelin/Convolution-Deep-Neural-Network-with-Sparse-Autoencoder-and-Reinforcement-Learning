@@ -109,6 +109,7 @@ int main()
         cv::imshow("Visual_dict_L1", cnn_autoenc_layer1.visual_dict);
         cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
         cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
+        imshow("L1 rec", cnn_autoenc_layer1.reconstruct);
         cv::waitKey(10);
     }
 
