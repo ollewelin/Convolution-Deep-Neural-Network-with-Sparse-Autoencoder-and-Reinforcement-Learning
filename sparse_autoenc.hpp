@@ -18,7 +18,7 @@ const int MAX_DEPTH = 9999;
 const int ms_patch_show = 1;
 int pause_score_print_ms = 1000;
 int ON_OFF_print_score = 0;
-int print_variable_relu_leak = 1;
+int print_variable_relu_leak = 0;
 /// ==============================================
 
 class sparse_autoenc
@@ -311,6 +311,9 @@ void sparse_autoenc::train_encoder(void)
     patch_row_offset = (int) (rand() % (max_patch_h_offset +1));///Randomize a start row of where input data patch will dot product with patch.
     patch_col_offset = (int) (rand() % (max_patch_w_offset +1));
     float max_temp = score_bottom_level;
+    index_ptr_dict              = zero_ptr_dict;///Set dictionary Mat pointer to start point
+    index_ptr_encoder_input     = zero_ptr_encoder_input;///
+    index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
 
     if(use_greedy_enc_method == 1)
     {
@@ -318,9 +321,6 @@ void sparse_autoenc::train_encoder(void)
         {
             score_table[i] = -1;///Clear the table
         }
-        index_ptr_dict              = zero_ptr_dict;///Set dictionary Mat pointer to start point
-        index_ptr_encoder_input     = zero_ptr_encoder_input;///
-        index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
         if(color_mode == 1)///When color mode there is another data access of the dictionary
         {
             ///First copy over Lx_IN_data to Mat encoder_input and denoised_residual_enc_input
@@ -612,8 +612,6 @@ void sparse_autoenc::train_encoder(void)
     else
     {
         ///NON greedy method
-        index_ptr_dict          = zero_ptr_dict;///Set dictionary Mat pointer to start point
-        index_ptr_encoder_input = zero_ptr_encoder_input;///
         if(color_mode == 1)///When color mode there is another data access of the dictionary
         {
             ///COLOR dictionary access
@@ -636,8 +634,13 @@ void sparse_autoenc::train_encoder(void)
                     ///=========== Copy over the input data to encoder_input =========
                     if(i==0)///Do this copy input data to encoder_input ones on Lx_OUT_depth 0, not for every Lx_OUT_depth turn
                     {
-                        *index_ptr_encoder_input = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder training below
+                        ///=========== Copy over the input data to encoder_input =========
+                        *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+                        *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+///TODO add denoising on *index_ptr_deno_residual_enc
                         index_ptr_encoder_input++;
+                        index_ptr_deno_residual_enc++;
+                        ///=========== End copy over the input data to encoder_input =====
                     }
                     ///=========== End copy over the input data to encoder_input =====
                 }
@@ -681,8 +684,13 @@ void sparse_autoenc::train_encoder(void)
                         ///=========== Copy over the input data to encoder_input =========
                         if(i==0)///Do this copy input data to encoder_input ones on Lx_OUT_depth 0, not for every Lx_OUT_depth turn
                         {
-                            *index_ptr_encoder_input = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder training below
+                            ///=========== Copy over the input data to encoder_input =========
+                            *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+                            *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+///TODO add denoising on *index_ptr_deno_residual_enc
                             index_ptr_encoder_input++;
+                            index_ptr_deno_residual_enc++;
+                            ///=========== End copy over the input data to encoder_input =====
                         }
                         ///=========== End copy over the input data to encoder_input =====
                     }
@@ -1074,7 +1082,7 @@ void sparse_autoenc::init(void)
                 {
                     for(int j=0; j<patch_side_size; j++)
                     {
-                        bias_hid2out.at<float>(h*patch_side_size*patch_side_size + i,j) = get_noise();
+                        bias_hid2out.at<float>(h*patch_side_size + i,j) = get_noise();
                     }
                 }
             }
