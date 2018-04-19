@@ -91,6 +91,9 @@ public:
 protected:
 
 private:
+    cv::Mat change_w_dict;///Change weight's used for update weight's
+    cv::Mat change_w_b_in2hid;///Change weight's used for update weight's
+    cv::Mat change_w_b_hid2out;///Change weight's used for update weight's
 
     int v_dict_hight;
     int v_dict_width;
@@ -126,6 +129,12 @@ private:
     float *index_ptr_deno_residual_enc;///Set up pointer for fast direct address of Mat
     float *zero_ptr_reconstruct;///Set up pointer for fast direct address of Mat
     float *index_ptr_reconstruct;///Set up pointer for fast direct address of Mat
+    float *zero_ptr_chan_w_dict;
+    float *index_ptr_chan_w_dict;
+    float *zero_ptr_chan_w_b_in2hid;
+    float *index_ptr_chan_w_b_in2hid;
+    float *zero_ptr_chan_w_b_hid2out;
+    float *index_ptr_chan_w_b_hid2out;
     ///=================================================================================
     void insert_patch_noise(void);
     void check_dictionary_ptr_patch(void);
@@ -161,7 +170,7 @@ void sparse_autoenc::lerning_autencoder(void)
         ///K_sparse could be set up to Lx_OUT_depth. If K_sparse = LxOUT_depth then there is not sparse mode
         if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
         {
-            ///Spare mode
+            ///Sparse mode
             if((score_table[i]) == -1)///Break if the score table tell that the atom's in use is less then up to K_sparse
             {
                 break;///atom's in use this time is fewer then K_sparse
@@ -924,6 +933,8 @@ void sparse_autoenc::init(void)
         v_dict_hight = patch_side_size * sqrt_nodes_plus1;
         v_dict_width = patch_side_size * sqrt_nodes_plus1;
         dictionary.create(patch_side_size * Lx_OUT_depth, patch_side_size, CV_32FC3);///The first atom is one box patch_side_size X patch_side_size in COLOR. the second atom is in box below the the first atom then it fit Dot product better then the visual_dict layout
+        change_w_dict.create(patch_side_size * Lx_OUT_depth, patch_side_size, CV_32FC3);
+        change_w_dict = cv::Scalar(0.0f, 0.0f, 0.0f);
         visual_dict.create(v_dict_hight, v_dict_width, CV_32FC3);
         visual_activation.create(v_dict_hight, v_dict_width, CV_32FC3);///Show activation overlay marking on each patch.
         visual_dict = cv::Scalar(0.5f, 0.5f, 0.5f);
@@ -948,6 +959,8 @@ void sparse_autoenc::init(void)
         if(use_bias == 1)
         {
             bias_hid2out.create(patch_side_size, patch_side_size, CV_32FC3);
+            change_w_b_hid2out.create(patch_side_size, patch_side_size, CV_32FC3);
+            change_w_b_hid2out = cv::Scalar(0.0f, 0.0f, 0.0f);
             for(int i=0;i<patch_side_size;i++)
             {
                 for(int j=0;j<patch_side_size*3;j++)
@@ -957,6 +970,8 @@ void sparse_autoenc::init(void)
             }
             printf("bias_hid2out are now created in COLOR mode CV_32FC3\n");
             bias_in2hid.create(Lx_OUT_depth, 1, CV_32FC1);
+            change_w_b_in2hid.create(Lx_OUT_depth, 1, CV_32FC1);
+            change_w_b_in2hid = cv::Scalar(0.0f);
             for(int i=0;i<Lx_OUT_depth;i++)
             {
                 bias_in2hid.at<float>(i, 0) = get_noise();
@@ -970,6 +985,8 @@ void sparse_autoenc::init(void)
         v_dict_hight = patch_side_size * Lx_IN_depth;///Each patches (boxes) row correspond to each LxIN depth level.
         v_dict_width = patch_side_size * Lx_OUT_depth;///Each column of small patches (boxes) correspond to each encode node = each Lx OUT depth.
         dictionary.create(patch_side_size * Lx_IN_depth * Lx_OUT_depth, patch_side_size, CV_32FC1);///The first atom is one box patch_side_size X patch_side_size in COLOR. the second atom is in box below the the first atom then it fit Dot product better then the visual_dict layout
+        change_w_dict.create(patch_side_size * Lx_IN_depth * Lx_OUT_depth, patch_side_size, CV_32FC1);
+        change_w_dict = cv::Scalar(0.0f);
         visual_dict.create(v_dict_hight, v_dict_width, CV_32FC1);///Only gray
         visual_activation.create(v_dict_hight, v_dict_width, CV_32FC3);/// Color only for show activation overlay marking on the gray (green overlay)
         visual_dict = cv::Scalar(0.5f);
@@ -995,6 +1012,8 @@ void sparse_autoenc::init(void)
         {
             hidden_delta = new float[Lx_OUT_depth];///Need for training bias_in2hid weight's
             bias_hid2out.create(patch_side_size  * Lx_IN_depth, patch_side_size, CV_32FC1);
+            change_w_b_hid2out.create(patch_side_size  * Lx_IN_depth, patch_side_size, CV_32FC1);
+            change_w_b_hid2out = cv::Scalar(0.0f);
             for(int h=0; h<Lx_IN_depth; h++)
             {
                 for(int i=0; i<patch_side_size; i++)
@@ -1007,6 +1026,8 @@ void sparse_autoenc::init(void)
             }
             printf("bias_hid2out are now created in GRAY mode CV_32FC1\n");
             bias_in2hid.create(Lx_OUT_depth, 1, CV_32FC1);
+            change_w_b_in2hid.create(Lx_OUT_depth, 1, CV_32FC1);
+            change_w_b_in2hid = cv::Scalar(0.0f);
             for(int i=0;i<Lx_OUT_depth;i++)
             {
                 bias_in2hid.at<float>(i, 0) = get_noise();
