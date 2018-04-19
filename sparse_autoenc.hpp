@@ -16,8 +16,8 @@ const int MAX_DEPTH = 9999;
 
 /// ======== Things for evaluation only ==========
 const int ms_patch_show = 1;
-int pause_score_print_ms = 1000;
-int ON_OFF_print_score = 0;
+int pause_score_print_ms = 500;
+int ON_OFF_print_score = 1;
 int print_variable_relu_leak = 0;
 /// ==============================================
 
@@ -379,8 +379,16 @@ void sparse_autoenc::train_encoder(void)
                 {
                     score_table[h] = strongest_atom_nr;///h is the K_sparse loop counter
                 }
+                if(-1 < strongest_atom_nr && strongest_atom_nr < Lx_OUT_depth)
+                {
+                    index_ptr_dict              = zero_ptr_dict + strongest_atom_nr * (patch_side_size*patch_side_size*dictionary.channels());///Set dictionary Mat pointer to start point
+                }
+                else
+                {
+                    printf("ERROR! strongest_atom_nr = %d is outside range\n", strongest_atom_nr);
+                    exit(0);
+                }
 
-                index_ptr_dict              = zero_ptr_dict + strongest_atom_nr * (patch_side_size*patch_side_size*dictionary.channels());///Set dictionary Mat pointer to start point
                 index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
                 ///Update residual data regarding the last selected atom's
                 for(int i=0;i<(patch_side_size*patch_side_size*dictionary.channels());i++)
@@ -462,15 +470,25 @@ void sparse_autoenc::train_encoder(void)
                 {
                     score_table[h] = strongest_atom_nr;///h is the K_sparse loop counter
                 }
-
-                index_ptr_dict              = zero_ptr_dict + strongest_atom_nr * (patch_side_size*patch_side_size*dictionary.channels());///Set dictionary Mat pointer to start point
+                if(-1 < strongest_atom_nr && strongest_atom_nr < Lx_OUT_depth)
+                {
+                    index_ptr_dict              = zero_ptr_dict + strongest_atom_nr * (patch_side_size*patch_side_size*Lx_IN_depth);///Set dictionary Mat pointer to start point
+                }
+                else
+                {
+                    printf("ERROR! strongest_atom_nr = %d is outside range\n", strongest_atom_nr);
+                    exit(0);
+                }
                 index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
                 ///Update residual data regarding the last selected atom's
-                for(int i=0;i<(patch_side_size*patch_side_size*dictionary.channels());i++)
+                for(int i=0;i<Lx_IN_depth;i++)
                 {
-                    *index_ptr_deno_residual_enc -= (*index_ptr_dict) * temp_hidden_node[strongest_atom_nr];
-                    index_ptr_deno_residual_enc++;
-                    index_ptr_dict++;
+                    for(int j=0; j<(patch_side_size*patch_side_size); j++)
+                    {
+                        *index_ptr_deno_residual_enc -= (*index_ptr_dict) * temp_hidden_node[strongest_atom_nr];
+                        index_ptr_deno_residual_enc++;
+                        index_ptr_dict++;
+                    }
                 }
                 train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
             }///h<K_sparse loop end

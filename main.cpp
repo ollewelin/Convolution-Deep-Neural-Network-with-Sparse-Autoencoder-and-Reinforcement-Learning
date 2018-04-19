@@ -42,8 +42,8 @@ int main()
     cnn_autoenc_layer1.e_stop_threshold    = 30.0f;
     //cnn_autoenc_layer1.K_sparse            = cnn_autoenc_layer1.Lx_OUT_depth / 2;
     cnn_autoenc_layer1.K_sparse            = 4;
-    cnn_autoenc_layer1.use_dynamic_penalty = 1;
-    cnn_autoenc_layer1.penalty_add         = 1.5f;
+    cnn_autoenc_layer1.use_dynamic_penalty = 0;
+    cnn_autoenc_layer1.penalty_add         = 0.0f;
     cnn_autoenc_layer1.init_noise_gain     = 0.55f;///
     cnn_autoenc_layer1.enable_denoising    = 0;
     cnn_autoenc_layer1.denoising_percent   = 50;///0..100
@@ -83,8 +83,8 @@ int main()
     cnn_autoenc_layer2.Lx_IN_widht      = cnn_autoenc_layer1.Lx_OUT_widht;///Convolution cube width of data
     cnn_autoenc_layer2.e_stop_threshold = 30.0f;
     cnn_autoenc_layer2.K_sparse     = cnn_autoenc_layer2.Lx_OUT_depth / 4;
-    cnn_autoenc_layer2.use_dynamic_penalty = 1;
-    cnn_autoenc_layer2.penalty_add      = 1.5f;
+    cnn_autoenc_layer2.use_dynamic_penalty = 0;
+    cnn_autoenc_layer2.penalty_add      = 0.0f;
     cnn_autoenc_layer2.init_noise_gain = 0.15f;///
     cnn_autoenc_layer2.enable_denoising = 0;
     cnn_autoenc_layer2.denoising_percent = 50;///0..100
