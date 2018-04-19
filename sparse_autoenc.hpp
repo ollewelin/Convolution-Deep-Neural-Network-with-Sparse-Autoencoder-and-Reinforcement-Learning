@@ -30,6 +30,7 @@ public:
     void init(void);
     void train_encoder(void);
     int show_patch_during_run;///Only for evaluation/debugging
+    int show_encoder_on_conv_cube;///Only for debugging
     int show_encoder;
     void copy_visual_dict2dictionary(void);
     void copy_dictionary2visual_dict(void);
@@ -57,7 +58,7 @@ public:
     cv::Mat visual_dict;///Visual organization of the Mat dictionary
     cv::Mat visual_activation;///Same as visual_dict Mat but add on a activation visualization on top of the image.
     cv::Mat encoder_input;///depth Z = Lx_IN_depth. layer size X, Y = patch_size * patch_size
-    cv::Mat denoised_enc_input;///same size as encoder_input. Only used when enable_denoising = 1;
+    cv::Mat denoised_residual_enc_input;///same size as encoder_input. Used when enable_denoising = 1 for noise or if Greedy encoder mode = 1 for residual
     cv::Mat reconstruct;///same size as encoder_input
     cv::Mat eval_indata_patch;
     cv::Mat eval_atom_patch;
@@ -83,9 +84,10 @@ public:
     ///-------------------------------------------------------------------------------------
 
 ///TODO denoising not implemented yet
-    int enable_denoising;///Input parameter
+    int enable_denoising;///Input parameter. If enabled the cv::Mat denoised_residual_enc_input used
     int denoising_percent;///Input parameter 0..100
 ///
+    int use_greedy_enc_method;///Use Greedy encoder selection of atom's take longer time but better solver. If enabled the cv::Mat denoised_residual_enc_input used
 protected:
 
 private:
@@ -105,6 +107,7 @@ private:
     int max_patch_h_offset;
     int max_patch_w_offset;
     float *train_hidden_node;///Only used in train_encoder() function
+    float *temp_hidden_node;///Used in Greedy method
     float *train_hidden_deleted_max;///Same size as train_hidden_node but erase all max value when fill score table
     float *hidden_delta;///This is need for training bias_in2hid weights
     ///======== Set up pointers for Mat direct address (fastest operation) =============
@@ -119,13 +122,14 @@ private:
     float *sanity_check_ptr;///Only for test
     float *zero_ptr_encoder_input;///Set up pointer for fast direct address of Mat
     float *index_ptr_encoder_input;///Set up pointer for fast direct address of Mat
-    float *zero_ptr_denoised_enc;///Set up pointer for fast direct address of Mat
-    float *index_ptr_denoised_enc;///Set up pointer for fast direct address of Mat
+    float *zero_ptr_deno_residual_enc;///Set up pointer for fast direct address of Mat
+    float *index_ptr_deno_residual_enc;///Set up pointer for fast direct address of Mat
     float *zero_ptr_reconstruct;///Set up pointer for fast direct address of Mat
     float *index_ptr_reconstruct;///Set up pointer for fast direct address of Mat
     ///=================================================================================
     void insert_patch_noise(void);
     void check_dictionary_ptr_patch(void);
+    void print_score_table_f(void);
     float total_loss;
     float get_noise(void);
 };
@@ -278,78 +282,353 @@ void sparse_autoenc::convolve_operation(void)
 {
     convolution_mode = 1;
 }
+inline void sparse_autoenc::print_score_table_f(void)
+{
+                /// ======= Only for evaluation =========
+            if(ON_OFF_print_score == 1)
+            {
+                ///print table
+                for(int i=0; i<Lx_OUT_depth; i++)
+                {
+                    if((score_table[i]) == -1)
+                    {
+                        printf("score_table[%d] = %d\n", i, score_table[i]);
+                    }
+                    else
+                    {
+                        printf("score_table[%d] = %d node = %f\n", i, score_table[i], train_hidden_node[(score_table[i])]);
+                    }
+                }
+                cv::waitKey(pause_score_print_ms);
+            }
+            /// ======= End evaluation ===========
+}
 void sparse_autoenc::train_encoder(void)
 {
+    float dot_product = 0.0f;
     int patch_row_offset=0;///This will point where the start upper row of the part of input data how will be dot product with the patch atom
     int patch_col_offset=0;///This will point where the start left column of the part of input data how will be dot product with the patch
     patch_row_offset = (int) (rand() % (max_patch_h_offset +1));///Randomize a start row of where input data patch will dot product with patch.
     patch_col_offset = (int) (rand() % (max_patch_w_offset +1));
+    float max_temp = score_bottom_level;
 
-    float dot_product = 0.0f;
-    index_ptr_dict          = zero_ptr_dict;///Set dictionary Mat pointer to start point
-    index_ptr_encoder_input = zero_ptr_encoder_input;///
-    if(color_mode == 1)///When color mode there is another data access of the dictionary
+    if(use_greedy_enc_method == 1)
     {
-        ///COLOR dictionary access
-        for(int i=0; i<Lx_OUT_depth; i++)
+        for(int i=0; i<Lx_OUT_depth; i++) ///-1 tell that this will not used
         {
-            ///Do the dot product (scalar product) of all the atom's in the dictionary with the input data on Lx_IN_data_cube
-            dot_product = 0.0f;
+            score_table[i] = -1;///Clear the table
+        }
+        index_ptr_dict              = zero_ptr_dict;///Set dictionary Mat pointer to start point
+        index_ptr_encoder_input     = zero_ptr_encoder_input;///
+        index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
+        if(color_mode == 1)///When color mode there is another data access of the dictionary
+        {
+            ///First copy over Lx_IN_data to Mat encoder_input and denoised_residual_enc_input
             for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
             {
                 index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((patch_row_offset + k/(patch_side_size*dictionary.channels())) * (Lx_IN_widht * Lx_IN_data_cube.channels()) + (k%(patch_side_size*dictionary.channels())) + (patch_col_offset * Lx_IN_data_cube.channels()));
-                dot_product += (*index_ptr_Lx_IN_data) * (*index_ptr_dict);
-                if(show_patch_during_run == 1)///Only for debugging)
-                {
-                    int eval_ROW = k/(patch_side_size*Lx_IN_data_cube.channels());
-                    int eval_COL = k%(patch_side_size*Lx_IN_data_cube.channels());
-                    eval_indata_patch.at<float>(eval_ROW, eval_COL)   = *index_ptr_Lx_IN_data;
-                    eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
-                }
-                index_ptr_dict++;///
                 ///=========== Copy over the input data to encoder_input =========
-                if(i==0)///Do this copy input data to encoder_input ones on Lx_OUT_depth 0, not for every Lx_OUT_depth turn
-                {
-                   *index_ptr_encoder_input = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder training below
-                   index_ptr_encoder_input++;
-                }
+                *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+                *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+///TODO add denoising on *index_ptr_deno_residual_enc
+                index_ptr_encoder_input++;
+                index_ptr_deno_residual_enc++;
                 ///=========== End copy over the input data to encoder_input =====
             }
-            if(use_bias == 1)
-            {
-                dot_product += bias_in2hid.at<float>(i, 1);
-            }
 
-            if(show_patch_during_run == 1)///Only for debugging)
+            for(int h=0; h<K_sparse; h++)///Run through K_sparse time and select by Greedy method and make residual each h turn
             {
-                imshow("patch", eval_indata_patch);
-                imshow("atom", eval_atom_patch);
-                cv::waitKey(ms_patch_show);
-            }
-            ///Put this dot product into Lx_OUT_convolution_cube for data place but in
-            train_hidden_node[i] = dot_product;
-            train_hidden_deleted_max[i] = dot_product;
-            index_ptr_Lx_OUT_conv = zero_ptr_Lx_OUT_conv + (i * Lx_OUT_widht * Lx_OUT_hight) + (patch_row_offset * Lx_OUT_widht) + (patch_col_offset);
-            *index_ptr_Lx_OUT_conv = dot_product;
+                index_ptr_dict          = zero_ptr_dict;///Set dictionary Mat pointer to start point
+                ///COLOR dictionary access
+                for(int i=0; i<Lx_OUT_depth; i++)
+                {
+                    index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
+                    dot_product = 0.0f;
+                    ///Make dot product between dictionary and index_ptr_deno_residual_enc
+                    ///and store the result in
+                    ///temp_hidden_node[i] = dot_product;
+                    for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
+                    {
+                        dot_product += (*index_ptr_deno_residual_enc) * (*index_ptr_dict);
+                        index_ptr_deno_residual_enc++;
+                        index_ptr_dict++;
+                    }
+                    ///and store the result in
+                    temp_hidden_node[i] = dot_product;
+                }///i<Lx_OUT_depth loop end
+                ///Do the score table
+                ///Make the score table, select out by score on order the K_sparse strongest atom's of the dictionary
+                ///h will Search through the most strongest atom's
+
+                max_temp = score_bottom_level;
+                int strongest_atom_nr = -1;
+                for(int j=0; j<Lx_OUT_depth; j++)
+                {
+                    if(max_temp < (temp_hidden_node[j]))
+                    {
+                        max_temp = (temp_hidden_node[j]);
+                        strongest_atom_nr = j;
+                    }
+                }
+                if(strongest_atom_nr == -1)
+                {
+                    score_table[h] = -1;///No atom's was stronger then score_bottom_level.
+                    break;///No more sparse all atom's was below score_bottom_level.
+                }
+                else
+                {
+                    score_table[h] = strongest_atom_nr;///h is the K_sparse loop counter
+                }
+
+                index_ptr_dict              = zero_ptr_dict + strongest_atom_nr * (patch_side_size*patch_side_size*dictionary.channels());///Set dictionary Mat pointer to start point
+                index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
+                ///Update residual data regarding the last selected atom's
+                for(int i=0;i<(patch_side_size*patch_side_size*dictionary.channels());i++)
+                {
+                    *index_ptr_deno_residual_enc -= (*index_ptr_dict) * temp_hidden_node[strongest_atom_nr];
+                    index_ptr_deno_residual_enc++;
+                    index_ptr_dict++;
+                }
+                train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
+            }///h<K_sparse loop end
+            /// ======= Only for evaluation =========
+            print_score_table_f();
+            /// ======= End evaluation ===========
         }
-    }
-    else
-    {
-        ///GRAY dictionary access
-        for(int i=0; i<Lx_OUT_depth; i++)
+        else
         {
-            ///Do the dot product (scalar product) of all the atom's in the dictionary with the input data on Lx_IN_data_cube
-            dot_product = 0.0f;
+            ///GRAY dictionary access
+            ///First copy over Lx_IN_data to Mat encoder_input and denoised_residual_enc_input
+
             for(int j=0; j<Lx_IN_depth; j++)
             {
                 for(int k=0; k<(patch_side_size*patch_side_size); k++)
                 {
-                    index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((j * patch_side_size*patch_side_size) + ((patch_row_offset + k/patch_side_size) * Lx_IN_widht) + (k%patch_side_size) + (patch_col_offset));
+                    index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((j * Lx_IN_hight * Lx_IN_widht) + ((patch_row_offset + k/patch_side_size) * Lx_IN_widht) + (k%patch_side_size) + (patch_col_offset));
+
+                    ///=========== Copy over the input data to encoder_input =========
+                    *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+                    *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+///TODO add denoising on *index_ptr_deno_residual_enc
+                    index_ptr_encoder_input++;
+                    index_ptr_deno_residual_enc++;
+                    ///=========== End copy over the input data to encoder_input =====
+                }
+            }
+
+            for(int h=0; h<K_sparse; h++)///Run through K_sparse time and select by Greedy method and make residual each h turn
+            {
+                index_ptr_dict          = zero_ptr_dict;///Set dictionary Mat pointer to start point
+                ///GRAY dictionary access
+                for(int i=0; i<Lx_OUT_depth; i++)
+                {
+                    index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
+                    dot_product = 0.0f;
+                    ///Make dot product between dictionary and index_ptr_deno_residual_enc
+                    ///and store the result in
+                    ///temp_hidden_node[i] = dot_product;
+                    for(int j=0; j<Lx_IN_depth; j++)///Need input depth when GRAY dictionary access
+                    {
+                        for(int k=0; k<(patch_side_size*patch_side_size); k++)
+                        {
+                            dot_product += (*index_ptr_deno_residual_enc) * (*index_ptr_dict);
+                            index_ptr_deno_residual_enc++;
+                            index_ptr_dict++;
+                        }
+                    }
+                    ///and store the result in
+                    temp_hidden_node[i] = dot_product;
+                }///i<Lx_OUT_depth loop end
+                ///Do the score table
+                ///Make the score table, select out by score on order the K_sparse strongest atom's of the dictionary
+                ///h will Search through the most strongest atom's
+
+                max_temp = score_bottom_level;
+                int strongest_atom_nr = -1;
+                for(int j=0; j<Lx_OUT_depth; j++)
+                {
+                    if(max_temp < (temp_hidden_node[j]))
+                    {
+                        max_temp = (temp_hidden_node[j]);
+                        strongest_atom_nr = j;
+                    }
+                }
+                if(strongest_atom_nr == -1)
+                {
+                    score_table[h] = -1;///No atom's was stronger then score_bottom_level.
+                    break;///No more sparse all atom's was below score_bottom_level.
+                }
+                else
+                {
+                    score_table[h] = strongest_atom_nr;///h is the K_sparse loop counter
+                }
+
+                index_ptr_dict              = zero_ptr_dict + strongest_atom_nr * (patch_side_size*patch_side_size*dictionary.channels());///Set dictionary Mat pointer to start point
+                index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
+                ///Update residual data regarding the last selected atom's
+                for(int i=0;i<(patch_side_size*patch_side_size*dictionary.channels());i++)
+                {
+                    *index_ptr_deno_residual_enc -= (*index_ptr_dict) * temp_hidden_node[strongest_atom_nr];
+                    index_ptr_deno_residual_enc++;
+                    index_ptr_dict++;
+                }
+                train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
+            }///h<K_sparse loop end
+            /// ======= Only for evaluation =========
+            print_score_table_f();
+            /// ======= End evaluation ===========
+        }
+
+        if(show_encoder==1)
+        {
+            imshow("encoder_input", encoder_input);
+        }
+
+        total_loss = 0.0f;///Clear
+        if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
+        {
+            if(color_mode==1)
+            {
+                reconstruct = cv::Scalar(0.5f, 0.5f, 0.5f);///Start with a neutral (gray) image
+            }
+            else
+            {
+                reconstruct = cv::Scalar(0.5f);///Start with a neutral (gray) image
+            }
+            ///Add bias signal to reconstruction
+            if(use_bias==1)
+            {
+                reconstruct += bias_hid2out;
+            }
+
+            for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's and do ReLU non linear activation function of hidden nodes
+            {
+                if((score_table[i]) == -1)///Break if the score table tell that the atom's in use is less then up to K_sparse
+                {
+                    break;///atom's in use this time is fewer then K_sparse
+                    ///Note this break event will probably never happen if score_bottom_level is set to something less then 0.0f
+                }
+
+                ///--- Do ReLU non linear activation function of hidden nodes
+                ///-- ReLU --
+                train_hidden_node[ (score_table[i]) ] = ReLU_function(train_hidden_node[ (score_table[i]) ]);///Do ReLU only on selected active hidden nodes
+                ///----------
+                /// ======= Only for evaluation =========
+                if(ON_OFF_print_score == 1)
+                {
+                    printf(" i = %d hidden_node[%d] = %f\n", i, (score_table[i]), train_hidden_node[ (score_table[i]) ]);
+                }
+                /// ======= End evaluation ===========
+
+                ///Train selected atom's procedure
+                ///Step 1. Make reconstruction
+                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+                ///Step 3. Update patch weights (and bias weights also)
+
+                ///============================================================
+                ///Step 1. Make reconstruction
+                ///============================================================
+                index_ptr_reconstruct = zero_ptr_reconstruct;
+                if(color_mode==1)
+                {
+                    int dict_start_ROW = ((score_table[i]) / sqrt_nodes_plus1) * patch_side_size*patch_side_size*dictionary.channels();
+                    int dict_start_COL = ((score_table[i]) % sqrt_nodes_plus1) * patch_side_size*dictionary.channels();
+                    for(int j=0; j<Lx_IN_depth; j++)
+                    {
+                        for(int k=0; k<patch_side_size*patch_side_size*reconstruct.channels(); k++)
+                        {
+                            index_ptr_dict = zero_ptr_dict + dict_start_ROW + dict_start_COL + ((k/(patch_side_size*reconstruct.channels())) * sqrt_nodes_plus1 * patch_side_size * dictionary.channels()) + k%(patch_side_size*reconstruct.channels());
+                            *index_ptr_reconstruct += train_hidden_node[(score_table[i])] * (*index_ptr_dict);
+                            index_ptr_reconstruct++;
+                        }
+                    }
+                }
+                else
+                {
+
+                }
+                ///============================================================
+                ///Step 1. complete
+                ///============================================================
+
+                ///============================================================
+                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+                ///============================================================
+
+                ///============================================================
+                ///Step 2. complete
+                ///============================================================
+
+                ///============================================================
+                ///Step 3. Update patch weights (and bias weights also)
+                ///============================================================
+
+                ///============================================================
+                ///Step 3. complete
+                ///============================================================
+
+            }
+
+        }
+        else
+        {
+            ///Not in sparse mode. No sparse constraints this mean's that all atom's in dictionary will be used to represent the reconstruction
+            ///and all atom's will also be trained every cycle.
+
+            for(int i=0; i<Lx_OUT_depth; i++) ///Go through all atom's
+            {
+                train_hidden_node[i] = ReLU_function(train_hidden_node[i]);///ReLU
+                ///Train selected atom's
+                ///Step 1. Make reconstruction
+                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+                ///Step 3. Update patch weights (and bias weights also)
+
+                ///============================================================
+                ///Step 1. Make reconstruction
+                ///============================================================
+
+                ///============================================================
+                ///Step 1. complete
+                ///============================================================
+
+                ///============================================================
+                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+                ///============================================================
+
+                ///============================================================
+                ///Step 2. complete
+                ///============================================================
+
+                ///============================================================
+                ///Step 3. Update patch weights (and bias weights also)
+                ///============================================================
+
+                ///============================================================
+                ///Step 3. complete
+                ///============================================================
+            }
+        }
+    }
+    else
+    {
+        ///NON greedy method
+        index_ptr_dict          = zero_ptr_dict;///Set dictionary Mat pointer to start point
+        index_ptr_encoder_input = zero_ptr_encoder_input;///
+        if(color_mode == 1)///When color mode there is another data access of the dictionary
+        {
+            ///COLOR dictionary access
+            for(int i=0; i<Lx_OUT_depth; i++)
+            {
+                ///Do the dot product (scalar product) of all the atom's in the dictionary with the input data on Lx_IN_data_cube
+                dot_product = 0.0f;
+                for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
+                {
+                    index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((patch_row_offset + k/(patch_side_size*dictionary.channels())) * (Lx_IN_widht * Lx_IN_data_cube.channels()) + (k%(patch_side_size*dictionary.channels())) + (patch_col_offset * Lx_IN_data_cube.channels()));
                     dot_product += (*index_ptr_Lx_IN_data) * (*index_ptr_dict);
                     if(show_patch_during_run == 1)///Only for debugging)
                     {
-                        int eval_ROW = k/(patch_side_size);
-                        int eval_COL = k%(patch_side_size);
+                        int eval_ROW = k/(patch_side_size*Lx_IN_data_cube.channels());
+                        int eval_COL = k%(patch_side_size*Lx_IN_data_cube.channels());
                         eval_indata_patch.at<float>(eval_ROW, eval_COL)   = *index_ptr_Lx_IN_data;
                         eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
                     }
@@ -362,192 +641,240 @@ void sparse_autoenc::train_encoder(void)
                     }
                     ///=========== End copy over the input data to encoder_input =====
                 }
+                if(use_bias == 1)
+                {
+                    dot_product += bias_in2hid.at<float>(i, 1);
+                }
+
                 if(show_patch_during_run == 1)///Only for debugging)
                 {
                     imshow("patch", eval_indata_patch);
                     imshow("atom", eval_atom_patch);
                     cv::waitKey(ms_patch_show);
                 }
+                ///Put this dot product into train_hidden_node
+                train_hidden_node[i] = dot_product;
+                train_hidden_deleted_max[i] = dot_product;
             }
-            if(use_bias == 1)
-            {
-                dot_product += bias_in2hid.at<float>(i, 1);
-            }
-            ///Put this dot product into Lx_OUT_convolution_cube for data place but in
-            train_hidden_node[i] = dot_product;
-            train_hidden_deleted_max[i] = dot_product;
-            index_ptr_Lx_OUT_conv = zero_ptr_Lx_OUT_conv + (i * Lx_OUT_widht * Lx_OUT_hight) + (patch_row_offset * Lx_OUT_widht) + (patch_col_offset);
-            *index_ptr_Lx_OUT_conv = dot_product;
-        }
-    }
-    if(show_encoder==1)
-    {
-        imshow("encoder_input", encoder_input);
-    }
-
-    total_loss = 0.0f;///Clear
-    if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
-    {
-        for(int i=0; i<Lx_OUT_depth; i++) ///-1 tell that this will not used
-        {
-            score_table[i] = -1;///Clear the table
-        }
-        ///Do sparse constraints
-        ///Make the score table, select out by score on order the K_sparse strongest atom's of the dictionary
-        for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's
-        {
-            float max_temp = score_bottom_level;
-            for(int j=0;j<Lx_OUT_depth;j++)
-            {
-                if(max_temp < (train_hidden_deleted_max[j]))
-                {
-                    max_temp = (train_hidden_deleted_max[j]);
-                    score_table[i] = j;
-                }
-            }
-            int index_delete_this = score_table[i];
-            train_hidden_deleted_max[index_delete_this] = 0.0f;///Delete this max value so next check will search for next strongest atom's and mark in score table
-        }
-
-        /// ======= Only for evaluation =========
-        if(ON_OFF_print_score == 1)
-        {
-            ///print table
-            for(int i=0; i<Lx_OUT_depth; i++)
-            {
-                if((score_table[i]) == -1)
-                {
-                    printf("score_table[%d] = %d\n", i, score_table[i]);
-                }
-                else
-                {
-                    printf("score_table[%d] = %d node = %f\n", i, score_table[i], train_hidden_node[(score_table[i])]);
-                }
-            }
-            cv::waitKey(pause_score_print_ms);
-        }
-        /// ======= End evaluation ===========
-
-        if(color_mode==1)
-        {
-            reconstruct = cv::Scalar(0.5f, 0.5f, 0.5f);///Start with a neutral (gray) image
         }
         else
         {
-            reconstruct = cv::Scalar(0.5f);///Start with a neutral (gray) image
-        }
-
-        ///Add bias signal to reconstruction
-        if(use_bias==1)
-        {
-            reconstruct += bias_hid2out;
-        }
-
-        for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's and do ReLU non linear activation function of hidden nodes
-        {
-            if((score_table[i]) == -1)///Break if the score table tell that the atom's in use is less then up to K_sparse
+            ///GRAY dictionary access
+            for(int i=0; i<Lx_OUT_depth; i++)
             {
-                break;///atom's in use this time is fewer then K_sparse
-                ///Note this break event will probably never happen if score_bottom_level is set to something less then 0.0f
-            }
-
-            ///--- Do ReLU non linear activation function of hidden nodes
-            ///-- ReLU --
-            train_hidden_node[ (score_table[i]) ] = ReLU_function(train_hidden_node[ (score_table[i]) ]);///Do ReLU only on selected active hidden nodes
-            ///----------
-            /// ======= Only for evaluation =========
-            if(ON_OFF_print_score == 1)
-            {
-                printf(" i = %d hidden_node[%d] = %f\n", i, (score_table[i]), train_hidden_node[ (score_table[i]) ]);
-            }
-            /// ======= End evaluation ===========
-
-            ///Train selected atom's procedure
-            ///Step 1. Make reconstruction
-            ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-            ///Step 3. Update patch weights (and bias weights also)
-
-            ///============================================================
-            ///Step 1. Make reconstruction
-            ///============================================================
-            index_ptr_reconstruct = zero_ptr_reconstruct;
-            if(color_mode==1)
-            {
-                int dict_start_ROW = ((score_table[i]) / sqrt_nodes_plus1) * patch_side_size*patch_side_size*dictionary.channels();
-                int dict_start_COL = ((score_table[i]) % sqrt_nodes_plus1) * patch_side_size*dictionary.channels();
+                ///Do the dot product (scalar product) of all the atom's in the dictionary with the input data on Lx_IN_data_cube
+                dot_product = 0.0f;
                 for(int j=0; j<Lx_IN_depth; j++)
                 {
-                    for(int k=0; k<patch_side_size*patch_side_size*reconstruct.channels(); k++)
+                    for(int k=0; k<(patch_side_size*patch_side_size); k++)
                     {
-                        index_ptr_dict = zero_ptr_dict + dict_start_ROW + dict_start_COL + ((k/(patch_side_size*reconstruct.channels())) * sqrt_nodes_plus1 * patch_side_size * dictionary.channels()) + k%(patch_side_size*reconstruct.channels());
-                        *index_ptr_reconstruct += train_hidden_node[(score_table[i])] * (*index_ptr_dict);
-                        index_ptr_reconstruct++;
+                        index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((j * Lx_IN_hight * Lx_IN_widht) + ((patch_row_offset + k/patch_side_size) * Lx_IN_widht) + (k%patch_side_size) + (patch_col_offset));
+                        dot_product += (*index_ptr_Lx_IN_data) * (*index_ptr_dict);
+                        if(show_patch_during_run == 1)///Only for debugging)
+                        {
+                            int eval_ROW = k/(patch_side_size);
+                            int eval_COL = k%(patch_side_size);
+                            eval_indata_patch.at<float>(eval_ROW, eval_COL)   = *index_ptr_Lx_IN_data;
+                            eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
+                        }
+                        index_ptr_dict++;///
+                        ///=========== Copy over the input data to encoder_input =========
+                        if(i==0)///Do this copy input data to encoder_input ones on Lx_OUT_depth 0, not for every Lx_OUT_depth turn
+                        {
+                            *index_ptr_encoder_input = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder training below
+                            index_ptr_encoder_input++;
+                        }
+                        ///=========== End copy over the input data to encoder_input =====
+                    }
+                    if(show_patch_during_run == 1)///Only for debugging)
+                    {
+                        imshow("patch", eval_indata_patch);
+                        imshow("atom", eval_atom_patch);
+                        cv::waitKey(ms_patch_show);
                     }
                 }
+                if(use_bias == 1)
+                {
+                    dot_product += bias_in2hid.at<float>(i, 1);
+                }
+                ///Put this dot product into train_hidden_node
+                train_hidden_node[i] = dot_product;
+                train_hidden_deleted_max[i] = dot_product;
+
+            }
+        }
+        if(show_encoder==1)
+        {
+            imshow("encoder_input", encoder_input);
+        }
+
+        total_loss = 0.0f;///Clear
+        if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
+        {
+            for(int i=0; i<Lx_OUT_depth; i++) ///-1 tell that this will not used
+            {
+                score_table[i] = -1;///Clear the table
+            }
+            ///Do sparse constraints
+            ///Make the score table, select out by score on order the K_sparse strongest atom's of the dictionary
+            for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's
+            {
+                float max_temp = score_bottom_level;
+                for(int j=0; j<Lx_OUT_depth; j++)
+                {
+                    if(max_temp < (train_hidden_deleted_max[j]))
+                    {
+                        max_temp = (train_hidden_deleted_max[j]);
+                        score_table[i] = j;
+                    }
+                }
+                int index_delete_this = score_table[i];
+                train_hidden_deleted_max[index_delete_this] = score_bottom_level;///Delete this max value so next check will search for next strongest atom's and mark in score table
+            }
+
+            /// ======= Only for evaluation =========
+            print_score_table_f();
+            /// ======= End evaluation ===========
+
+            if(color_mode==1)
+            {
+                reconstruct = cv::Scalar(0.5f, 0.5f, 0.5f);///Start with a neutral (gray) image
             }
             else
             {
+                reconstruct = cv::Scalar(0.5f);///Start with a neutral (gray) image
+            }
+
+            ///Add bias signal to reconstruction
+            if(use_bias==1)
+            {
+                reconstruct += bias_hid2out;
+            }
+
+            for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's and do ReLU non linear activation function of hidden nodes
+            {
+                if((score_table[i]) == -1)///Break if the score table tell that the atom's in use is less then up to K_sparse
+                {
+                    break;///atom's in use this time is fewer then K_sparse
+                    ///Note this break event will probably never happen if score_bottom_level is set to something less then 0.0f
+                }
+
+                ///--- Do ReLU non linear activation function of hidden nodes
+                ///-- ReLU --
+                train_hidden_node[ (score_table[i]) ] = ReLU_function(train_hidden_node[ (score_table[i]) ]);///Do ReLU only on selected active hidden nodes
+                ///----------
+                /// ======= Only for evaluation =========
+                if(ON_OFF_print_score == 1)
+                {
+                    printf(" i = %d hidden_node[%d] = %f\n", i, (score_table[i]), train_hidden_node[ (score_table[i]) ]);
+                }
+                /// ======= End evaluation ===========
+
+                ///Train selected atom's procedure
+                ///Step 1. Make reconstruction
+                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+                ///Step 3. Update patch weights (and bias weights also)
+
+                ///============================================================
+                ///Step 1. Make reconstruction
+                ///============================================================
+                index_ptr_reconstruct = zero_ptr_reconstruct;
+                if(color_mode==1)
+                {
+                    int dict_start_ROW = ((score_table[i]) / sqrt_nodes_plus1) * patch_side_size*patch_side_size*dictionary.channels();
+                    int dict_start_COL = ((score_table[i]) % sqrt_nodes_plus1) * patch_side_size*dictionary.channels();
+                    for(int j=0; j<Lx_IN_depth; j++)
+                    {
+                        for(int k=0; k<patch_side_size*patch_side_size*reconstruct.channels(); k++)
+                        {
+                            index_ptr_dict = zero_ptr_dict + dict_start_ROW + dict_start_COL + ((k/(patch_side_size*reconstruct.channels())) * sqrt_nodes_plus1 * patch_side_size * dictionary.channels()) + k%(patch_side_size*reconstruct.channels());
+                            *index_ptr_reconstruct += train_hidden_node[(score_table[i])] * (*index_ptr_dict);
+                            index_ptr_reconstruct++;
+                        }
+                    }
+                }
+                else
+                {
+
+                }
+                ///============================================================
+                ///Step 1. complete
+                ///============================================================
+
+                ///============================================================
+                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+                ///============================================================
+
+                ///============================================================
+                ///Step 2. complete
+                ///============================================================
+
+                ///============================================================
+                ///Step 3. Update patch weights (and bias weights also)
+                ///============================================================
+
+                ///============================================================
+                ///Step 3. complete
+                ///============================================================
 
             }
-            ///============================================================
-            ///Step 1. complete
-            ///============================================================
-
-            ///============================================================
-            ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-            ///============================================================
-
-            ///============================================================
-            ///Step 2. complete
-            ///============================================================
-
-            ///============================================================
-            ///Step 3. Update patch weights (and bias weights also)
-            ///============================================================
-
-            ///============================================================
-            ///Step 3. complete
-            ///============================================================
 
         }
-
-    }
-    else
-    {
-        ///Not in sparse mode. No sparse constraints this mean's that all atom's in dictionary will be used to represent the reconstruction
-        ///and all atom's will also be trained every cycle.
-
-        for(int i=0; i<Lx_OUT_depth; i++) ///Go through all atom's
+        else
         {
-            train_hidden_node[i] = ReLU_function(train_hidden_node[i]);///ReLU
-            ///Train selected atom's
-            ///Step 1. Make reconstruction
-            ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-            ///Step 3. Update patch weights (and bias weights also)
+            ///Not in sparse mode. No sparse constraints this mean's that all atom's in dictionary will be used to represent the reconstruction
+            ///and all atom's will also be trained every cycle.
 
-            ///============================================================
-            ///Step 1. Make reconstruction
-            ///============================================================
+            for(int i=0; i<Lx_OUT_depth; i++) ///Go through all atom's
+            {
+                train_hidden_node[i] = ReLU_function(train_hidden_node[i]);///ReLU
+                ///Train selected atom's
+                ///Step 1. Make reconstruction
+                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+                ///Step 3. Update patch weights (and bias weights also)
 
-            ///============================================================
-            ///Step 1. complete
-            ///============================================================
+                ///============================================================
+                ///Step 1. Make reconstruction
+                ///============================================================
 
-            ///============================================================
-            ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-            ///============================================================
+                ///============================================================
+                ///Step 1. complete
+                ///============================================================
 
-            ///============================================================
-            ///Step 2. complete
-            ///============================================================
+                ///============================================================
+                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+                ///============================================================
 
-            ///============================================================
-            ///Step 3. Update patch weights (and bias weights also)
-            ///============================================================
+                ///============================================================
+                ///Step 2. complete
+                ///============================================================
 
-            ///============================================================
-            ///Step 3. complete
-            ///============================================================
+                ///============================================================
+                ///Step 3. Update patch weights (and bias weights also)
+                ///============================================================
+
+                ///============================================================
+                ///Step 3. complete
+                ///============================================================
+            }
+        }
+    }
+    if(show_encoder_on_conv_cube==1)
+    {
+     //   Lx_OUT_convolution_cube = cv::Scalar(0.0f);
+        for(int h=0;h<K_sparse;h++)
+        {
+            int i=0;
+            if(score_table[h] == -1)
+            {
+                break;
+            }
+            else
+            {
+                i = score_table[h];
+                index_ptr_Lx_OUT_conv = zero_ptr_Lx_OUT_conv + (i * Lx_OUT_widht * Lx_OUT_hight) + (patch_row_offset * Lx_OUT_widht) + (patch_col_offset);
+                *index_ptr_Lx_OUT_conv = train_hidden_node[i];
+            }
         }
     }
     convolution_mode = 0;
@@ -619,6 +946,7 @@ void sparse_autoenc::init(void)
     }
     score_table = new int[Lx_OUT_depth];///Set up the size of the score_table will then contain the order of strength of each atom's. Only used in sparse mode. When K_sparse = Lx_OUT_depth this not used.
     train_hidden_node  = new float[Lx_OUT_depth];///
+    temp_hidden_node = new float[Lx_OUT_depth];///Used in greedy method
     train_hidden_deleted_max = new float[Lx_OUT_depth];///
     convolution_mode = 0;
 
@@ -685,7 +1013,7 @@ void sparse_autoenc::init(void)
             printf("********\n");
         }
         encoder_input.create     (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC3);
-        denoised_enc_input.create(patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC3);
+        denoised_residual_enc_input.create(patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC3);
         reconstruct.create       (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC3);
         printf("This layer First Layer init_in_from_outside = %d\n", init_in_from_outside);
         Lx_IN_data_cube.create(Lx_IN_hight, Lx_IN_widht, CV_32FC3);
@@ -720,7 +1048,7 @@ void sparse_autoenc::init(void)
         visual_dict = cv::Scalar(0.5f);
         visual_activation = cv::Scalar(0.5f, 0.5f, 0.5f);
         encoder_input.create     (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC1);
-        denoised_enc_input.create(patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC1);
+        denoised_residual_enc_input.create(patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC1);
         reconstruct.create       (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC1);
         if(init_in_from_outside == 1)
         {
@@ -821,8 +1149,8 @@ void sparse_autoenc::init(void)
     index_ptr_Lx_OUT_conv  = zero_ptr_Lx_OUT_conv;///Set up pointer for fast direct address of Mat
     zero_ptr_encoder_input  = encoder_input.ptr<float>(0);///Set up pointer for fast direct address of Mat
     index_ptr_encoder_input = zero_ptr_encoder_input;///Set up pointer for fast direct address of Mat
-    zero_ptr_denoised_enc  = denoised_enc_input.ptr<float>(0);///Set up pointer for fast direct address of Mat
-    index_ptr_denoised_enc = zero_ptr_denoised_enc;///Set up pointer for fast direct address of Mat
+    zero_ptr_deno_residual_enc  = denoised_residual_enc_input.ptr<float>(0);///Set up pointer for fast direct address of Mat
+    index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///Set up pointer for fast direct address of Mat
     zero_ptr_reconstruct   = reconstruct.ptr<float>(0);///Set up pointer for fast direct address of Mat
     index_ptr_reconstruct  = zero_ptr_reconstruct;///Set up pointer for fast direct address of Mat
     ///=================================================================================

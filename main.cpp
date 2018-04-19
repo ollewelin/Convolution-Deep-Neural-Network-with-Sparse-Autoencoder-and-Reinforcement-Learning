@@ -26,10 +26,12 @@ int main()
 
 
     cnn_autoenc_layer1.show_patch_during_run = 1;///Only for debugging
+    cnn_autoenc_layer1.use_greedy_enc_method = 1;///
+    cnn_autoenc_layer1.show_encoder_on_conv_cube = 1;
     cnn_autoenc_layer1.show_encoder = 0;
     cnn_autoenc_layer1.init_in_from_outside = 0;///When init_in_from_outside = 1 then Lx_IN_data_cube is same poiner as the Lx_OUT_convolution_cube of the previous layer
     cnn_autoenc_layer1.color_mode          = 1;///color_mode = 1 is ONLY allowed to use at Layer 1
-    cnn_autoenc_layer1.patch_side_size     = 11;
+    cnn_autoenc_layer1.patch_side_size     = 7;
     cnn_autoenc_layer1.Lx_IN_depth         = 1;///This is forced inside class to 1 when color_mode = 1. In gray mode = color_mode = 0 this number is the size of the input data depth.
                                                ///So if for example the input data come a convolution cube the Lx_IN_depth is the number of the depth of this convolution cube source/input data
                                                ///In a chain of Layer's the Lx_IN_depth will the same size as the Lx_OUT_depth of the previous layer order.
@@ -38,7 +40,8 @@ int main()
     cnn_autoenc_layer1.Lx_IN_hight         = CIFAR_object.CIFAR_height;///Convolution cube hight of data
     cnn_autoenc_layer1.Lx_IN_widht         = CIFAR_object.CIFAR_width;///Convolution cube width of data
     cnn_autoenc_layer1.e_stop_threshold    = 30.0f;
-    cnn_autoenc_layer1.K_sparse            = cnn_autoenc_layer1.Lx_OUT_depth / 4;
+    //cnn_autoenc_layer1.K_sparse            = cnn_autoenc_layer1.Lx_OUT_depth / 2;
+    cnn_autoenc_layer1.K_sparse            = 4;
     cnn_autoenc_layer1.use_dynamic_penalty = 1;
     cnn_autoenc_layer1.penalty_add         = 1.5f;
     cnn_autoenc_layer1.init_noise_gain     = 0.55f;///
@@ -64,7 +67,9 @@ int main()
    /// cv::imshow("L1 OUT cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
 
     cnn_autoenc_layer2.show_patch_during_run = 0;///Only for debugging
+    cnn_autoenc_layer2.use_greedy_enc_method = 1;///
     cnn_autoenc_layer2.show_encoder = 1;
+    cnn_autoenc_layer2.show_encoder_on_conv_cube = 1;
     cnn_autoenc_layer2.Lx_IN_data_cube = cnn_autoenc_layer1.Lx_OUT_convolution_cube;///Pointer are copy NOT copy the physical memory. Copy physical memory is not good solution here.
     cnn_autoenc_layer2.init_in_from_outside       = 1;///When init_in_from_outside = 1 then Lx_IN_data_cube is same poiner as the Lx_OUT_convolution_cube of the previous layer
     cnn_autoenc_layer2.color_mode      = 0;///color_mode = 1 is ONLY allowed to use at Layer 1
@@ -110,7 +115,7 @@ int main()
         cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
         cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
         imshow("L1 rec", cnn_autoenc_layer1.reconstruct);
-        cv::waitKey(10);
+        cv::waitKey(100);
     }
 
     return 0;
