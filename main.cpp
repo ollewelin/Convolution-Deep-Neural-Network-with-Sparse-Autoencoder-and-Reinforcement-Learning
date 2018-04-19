@@ -35,13 +35,13 @@ int main()
     cnn_autoenc_layer1.Lx_IN_depth         = 1;///This is forced inside class to 1 when color_mode = 1. In gray mode = color_mode = 0 this number is the size of the input data depth.
                                                ///So if for example the input data come a convolution cube the Lx_IN_depth is the number of the depth of this convolution cube source/input data
                                                ///In a chain of Layer's the Lx_IN_depth will the same size as the Lx_OUT_depth of the previous layer order.
-    cnn_autoenc_layer1.Lx_OUT_depth        = 10;///This is the number of atom's in the whole dictionary.
+    cnn_autoenc_layer1.Lx_OUT_depth        = 20;///This is the number of atom's in the whole dictionary.
     cnn_autoenc_layer1.stride              = 1;
     cnn_autoenc_layer1.Lx_IN_hight         = CIFAR_object.CIFAR_height;///Convolution cube hight of data
     cnn_autoenc_layer1.Lx_IN_widht         = CIFAR_object.CIFAR_width;///Convolution cube width of data
     cnn_autoenc_layer1.e_stop_threshold    = 30.0f;
-    //cnn_autoenc_layer1.K_sparse            = cnn_autoenc_layer1.Lx_OUT_depth / 2;
-    cnn_autoenc_layer1.K_sparse            = 4;
+    cnn_autoenc_layer1.K_sparse            = cnn_autoenc_layer1.Lx_OUT_depth / 4;
+    //cnn_autoenc_layer1.K_sparse            = 2;
     cnn_autoenc_layer1.use_dynamic_penalty = 0;
     cnn_autoenc_layer1.penalty_add         = 0.0f;
     cnn_autoenc_layer1.init_noise_gain     = 0.55f;///
@@ -83,6 +83,7 @@ int main()
     cnn_autoenc_layer2.Lx_IN_widht      = cnn_autoenc_layer1.Lx_OUT_widht;///Convolution cube width of data
     cnn_autoenc_layer2.e_stop_threshold = 30.0f;
     cnn_autoenc_layer2.K_sparse     = cnn_autoenc_layer2.Lx_OUT_depth / 4;
+    //cnn_autoenc_layer2.K_sparse     = 2;
     cnn_autoenc_layer2.use_dynamic_penalty = 0;
     cnn_autoenc_layer2.penalty_add      = 0.0f;
     cnn_autoenc_layer2.init_noise_gain = 0.15f;///
@@ -92,7 +93,7 @@ int main()
     cnn_autoenc_layer2.use_leak_relu = 1;
     cnn_autoenc_layer2.score_bottom_level = -1000.0f;
     cnn_autoenc_layer2.use_variable_leak_relu = 0;
-    cnn_autoenc_layer2.fix_relu_leak_gain = 0.1;
+    cnn_autoenc_layer2.fix_relu_leak_gain = 0.01;
 
     cnn_autoenc_layer2.init();
     cnn_autoenc_layer2.k_sparse_sanity_check();
@@ -105,6 +106,7 @@ int main()
     cv::waitKey(1);
     while(1)
     {
+      //  CIFAR_object.insert_a_random_CIFAR_image();
         cnn_autoenc_layer1.random_change_ReLU_leak_variable();
         cnn_autoenc_layer1.train_encoder();
         cnn_autoenc_layer2.train_encoder();
@@ -115,6 +117,7 @@ int main()
         cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
         cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
         imshow("L1 rec", cnn_autoenc_layer1.reconstruct);
+        imshow("L2 rec", cnn_autoenc_layer2.reconstruct);
         cv::waitKey(100);
     }
 

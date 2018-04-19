@@ -16,8 +16,8 @@ const int MAX_DEPTH = 9999;
 
 /// ======== Things for evaluation only ==========
 const int ms_patch_show = 1;
-int pause_score_print_ms = 500;
-int ON_OFF_print_score = 1;
+int pause_score_print_ms = 5000;
+int ON_OFF_print_score = 0;
 int print_variable_relu_leak = 0;
 /// ==============================================
 
@@ -132,7 +132,131 @@ private:
     void print_score_table_f(void);
     float total_loss;
     float get_noise(void);
+    float check_remove_Nan(float);
+    void lerning_autencoder(void);
+
+
 };
+void sparse_autoenc::lerning_autencoder(void)
+{
+
+    if(color_mode==1)
+    {
+        reconstruct = cv::Scalar(0.5f, 0.5f, 0.5f);///Start with a neutral (gray) image
+    }
+    else
+    {
+        reconstruct = cv::Scalar(0.5f);///Start with a neutral (gray) image
+    }
+
+    ///Add bias signal to reconstruction
+    if(use_bias==1)
+    {
+        reconstruct += bias_hid2out;
+    }
+
+    index_ptr_dict = zero_ptr_dict;
+    for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's and do ReLU non linear activation function of hidden nodes
+    {
+        ///K_sparse could be set up to Lx_OUT_depth. If K_sparse = LxOUT_depth then there is not sparse mode
+        if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
+        {
+            ///Spare mode
+            if((score_table[i]) == -1)///Break if the score table tell that the atom's in use is less then up to K_sparse
+            {
+                break;///atom's in use this time is fewer then K_sparse
+                ///Note this break event will probably never happen if score_bottom_level is set to something less then 0.0f
+            }
+            ///--- Do ReLU non linear activation function of hidden nodes
+            ///-- ReLU --
+            train_hidden_node[ (score_table[i]) ] = ReLU_function(train_hidden_node[ (score_table[i]) ]);///Do ReLU only on selected active hidden nodes
+            ///----------
+            /// ======= Only for evaluation =========
+            if(ON_OFF_print_score == 1)
+            {
+                printf(" i = %d hidden_node[%d] = %f\n", i, (score_table[i]), train_hidden_node[ (score_table[i]) ]);
+            }
+            /// ======= End evaluation ===========
+        }
+        else
+        {
+            ///No sparsity Mode setting. All atom's used
+            train_hidden_node[i] = ReLU_function(train_hidden_node[i]);///Do ReLU only on all hidden nodes
+        }
+        ///Train selected atom's procedure
+        ///Step 1. Make reconstruction
+        ///Step 2. Calculate each pixel's error. Sum up the total loss for report. Also set the hidden_delta[] for step 4
+        ///Step 3. Update patch weights (and bias_hid2out weights also)
+        ///Step 4. Update bias_in2hid regarding the hidden_delta[]
+
+        ///============================================================
+        ///Step 1. Make reconstruction from one hidden node each turn
+        ///============================================================
+        index_ptr_reconstruct = zero_ptr_reconstruct;
+        if(color_mode==1)
+        {
+            ///COLOR mode reconstruction
+            int dict_start_ROW = ((score_table[i]) / sqrt_nodes_plus1) * patch_side_size*patch_side_size*dictionary.channels();
+            int dict_start_COL = ((score_table[i]) % sqrt_nodes_plus1) * patch_side_size*dictionary.channels();
+            for(int j=0; j<Lx_IN_depth; j++)
+            {
+                for(int k=0; k<patch_side_size*patch_side_size*reconstruct.channels(); k++)
+                {
+                    index_ptr_dict = zero_ptr_dict + dict_start_ROW + dict_start_COL + ((k/(patch_side_size*reconstruct.channels())) * sqrt_nodes_plus1 * patch_side_size * dictionary.channels()) + k%(patch_side_size*reconstruct.channels());
+                    *index_ptr_reconstruct += train_hidden_node[(score_table[i])] * (*index_ptr_dict);
+                    index_ptr_reconstruct++;
+                }
+            }
+        }
+        else
+        {
+            ///GRAY mode reconstruction
+            index_ptr_reconstruct = zero_ptr_reconstruct;
+            index_ptr_dict = zero_ptr_dict + (score_table[i]) * patch_side_size*patch_side_size*Lx_IN_depth;
+            for(int j=0; j<Lx_IN_depth; j++)
+            {
+                for(int k=0; k<patch_side_size*patch_side_size; k++)
+                {
+                    *index_ptr_reconstruct += train_hidden_node[(score_table[i])] * (*index_ptr_dict);
+                    index_ptr_dict++;
+                    index_ptr_reconstruct++;
+                }
+            }
+        }
+        ///============================================================
+        ///Step 1. complete reconstruction from one hidden node
+        ///============================================================
+
+        ///============================================================
+        ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+        ///============================================================
+
+        ///============================================================
+        ///Step 2. complete
+        ///============================================================
+
+        ///============================================================
+        ///Step 3. Update patch weights (and bias weights also)
+        ///============================================================
+
+        ///============================================================
+        ///Step 3. complete
+        ///============================================================
+
+    }
+
+}
+
+inline float sparse_autoenc::check_remove_Nan(float f_input)
+{
+    float f_output = f_input;
+    if(f_input != f_input)
+    {
+        printf("WARNING! float NaN occur Set to 0.001f\n");
+        f_output = 0.001f;
+    }
+    return f_output;
+}
 inline float sparse_autoenc::ReLU_function(float input_value)
 {
     float ReLU_result = 0.0f;
@@ -496,136 +620,22 @@ void sparse_autoenc::train_encoder(void)
             print_score_table_f();
             /// ======= End evaluation ===========
         }
-
+///============= End Dot product and score table in Greedy mode ============
+///=============
         if(show_encoder==1)
         {
             imshow("encoder_input", encoder_input);
         }
 
         total_loss = 0.0f;///Clear
-        if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
-        {
-            if(color_mode==1)
-            {
-                reconstruct = cv::Scalar(0.5f, 0.5f, 0.5f);///Start with a neutral (gray) image
-            }
-            else
-            {
-                reconstruct = cv::Scalar(0.5f);///Start with a neutral (gray) image
-            }
-            ///Add bias signal to reconstruction
-            if(use_bias==1)
-            {
-                reconstruct += bias_hid2out;
-            }
+        /// lerning_autencoder() will do this:
+        ///Train selected atom's procedure
+        ///Step 1. Make reconstruction
+        ///Step 2. Calculate each pixel's error. Sum up the total loss for report. Also set the hidden_delta[] for step 4
+        ///Step 3. Update patch weights (and bias_hid2out weights also)
+        ///Step 4. Update bias_in2hid regarding the hidden_delta[]
+        lerning_autencoder();///function do Step1..4
 
-            for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's and do ReLU non linear activation function of hidden nodes
-            {
-                if((score_table[i]) == -1)///Break if the score table tell that the atom's in use is less then up to K_sparse
-                {
-                    break;///atom's in use this time is fewer then K_sparse
-                    ///Note this break event will probably never happen if score_bottom_level is set to something less then 0.0f
-                }
-
-                ///--- Do ReLU non linear activation function of hidden nodes
-                ///-- ReLU --
-                train_hidden_node[ (score_table[i]) ] = ReLU_function(train_hidden_node[ (score_table[i]) ]);///Do ReLU only on selected active hidden nodes
-                ///----------
-                /// ======= Only for evaluation =========
-                if(ON_OFF_print_score == 1)
-                {
-                    printf(" i = %d hidden_node[%d] = %f\n", i, (score_table[i]), train_hidden_node[ (score_table[i]) ]);
-                }
-                /// ======= End evaluation ===========
-
-                ///Train selected atom's procedure
-                ///Step 1. Make reconstruction
-                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-                ///Step 3. Update patch weights (and bias weights also)
-
-                ///============================================================
-                ///Step 1. Make reconstruction
-                ///============================================================
-                index_ptr_reconstruct = zero_ptr_reconstruct;
-                if(color_mode==1)
-                {
-                    int dict_start_ROW = ((score_table[i]) / sqrt_nodes_plus1) * patch_side_size*patch_side_size*dictionary.channels();
-                    int dict_start_COL = ((score_table[i]) % sqrt_nodes_plus1) * patch_side_size*dictionary.channels();
-                    for(int j=0; j<Lx_IN_depth; j++)
-                    {
-                        for(int k=0; k<patch_side_size*patch_side_size*reconstruct.channels(); k++)
-                        {
-                            index_ptr_dict = zero_ptr_dict + dict_start_ROW + dict_start_COL + ((k/(patch_side_size*reconstruct.channels())) * sqrt_nodes_plus1 * patch_side_size * dictionary.channels()) + k%(patch_side_size*reconstruct.channels());
-                            *index_ptr_reconstruct += train_hidden_node[(score_table[i])] * (*index_ptr_dict);
-                            index_ptr_reconstruct++;
-                        }
-                    }
-                }
-                else
-                {
-
-                }
-                ///============================================================
-                ///Step 1. complete
-                ///============================================================
-
-                ///============================================================
-                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-                ///============================================================
-
-                ///============================================================
-                ///Step 2. complete
-                ///============================================================
-
-                ///============================================================
-                ///Step 3. Update patch weights (and bias weights also)
-                ///============================================================
-
-                ///============================================================
-                ///Step 3. complete
-                ///============================================================
-
-            }
-
-        }
-        else
-        {
-            ///Not in sparse mode. No sparse constraints this mean's that all atom's in dictionary will be used to represent the reconstruction
-            ///and all atom's will also be trained every cycle.
-
-            for(int i=0; i<Lx_OUT_depth; i++) ///Go through all atom's
-            {
-                train_hidden_node[i] = ReLU_function(train_hidden_node[i]);///ReLU
-                ///Train selected atom's
-                ///Step 1. Make reconstruction
-                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-                ///Step 3. Update patch weights (and bias weights also)
-
-                ///============================================================
-                ///Step 1. Make reconstruction
-                ///============================================================
-
-                ///============================================================
-                ///Step 1. complete
-                ///============================================================
-
-                ///============================================================
-                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-                ///============================================================
-
-                ///============================================================
-                ///Step 2. complete
-                ///============================================================
-
-                ///============================================================
-                ///Step 3. Update patch weights (and bias weights also)
-                ///============================================================
-
-                ///============================================================
-                ///Step 3. complete
-                ///============================================================
-            }
-        }
     }
     else
     {
@@ -726,7 +736,6 @@ void sparse_autoenc::train_encoder(void)
                 ///Put this dot product into train_hidden_node
                 train_hidden_node[i] = dot_product;
                 train_hidden_deleted_max[i] = dot_product;
-
             }
         }
         if(show_encoder==1)
@@ -762,132 +771,24 @@ void sparse_autoenc::train_encoder(void)
             print_score_table_f();
             /// ======= End evaluation ===========
 
-            if(color_mode==1)
-            {
-                reconstruct = cv::Scalar(0.5f, 0.5f, 0.5f);///Start with a neutral (gray) image
-            }
-            else
-            {
-                reconstruct = cv::Scalar(0.5f);///Start with a neutral (gray) image
-            }
-
-            ///Add bias signal to reconstruction
-            if(use_bias==1)
-            {
-                reconstruct += bias_hid2out;
-            }
-
-            for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's and do ReLU non linear activation function of hidden nodes
-            {
-                if((score_table[i]) == -1)///Break if the score table tell that the atom's in use is less then up to K_sparse
-                {
-                    break;///atom's in use this time is fewer then K_sparse
-                    ///Note this break event will probably never happen if score_bottom_level is set to something less then 0.0f
-                }
-
-                ///--- Do ReLU non linear activation function of hidden nodes
-                ///-- ReLU --
-                train_hidden_node[ (score_table[i]) ] = ReLU_function(train_hidden_node[ (score_table[i]) ]);///Do ReLU only on selected active hidden nodes
-                ///----------
-                /// ======= Only for evaluation =========
-                if(ON_OFF_print_score == 1)
-                {
-                    printf(" i = %d hidden_node[%d] = %f\n", i, (score_table[i]), train_hidden_node[ (score_table[i]) ]);
-                }
-                /// ======= End evaluation ===========
-
-                ///Train selected atom's procedure
-                ///Step 1. Make reconstruction
-                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-                ///Step 3. Update patch weights (and bias weights also)
-
-                ///============================================================
-                ///Step 1. Make reconstruction
-                ///============================================================
-                index_ptr_reconstruct = zero_ptr_reconstruct;
-                if(color_mode==1)
-                {
-                    int dict_start_ROW = ((score_table[i]) / sqrt_nodes_plus1) * patch_side_size*patch_side_size*dictionary.channels();
-                    int dict_start_COL = ((score_table[i]) % sqrt_nodes_plus1) * patch_side_size*dictionary.channels();
-                    for(int j=0; j<Lx_IN_depth; j++)
-                    {
-                        for(int k=0; k<patch_side_size*patch_side_size*reconstruct.channels(); k++)
-                        {
-                            index_ptr_dict = zero_ptr_dict + dict_start_ROW + dict_start_COL + ((k/(patch_side_size*reconstruct.channels())) * sqrt_nodes_plus1 * patch_side_size * dictionary.channels()) + k%(patch_side_size*reconstruct.channels());
-                            *index_ptr_reconstruct += train_hidden_node[(score_table[i])] * (*index_ptr_dict);
-                            index_ptr_reconstruct++;
-                        }
-                    }
-                }
-                else
-                {
-
-                }
-                ///============================================================
-                ///Step 1. complete
-                ///============================================================
-
-                ///============================================================
-                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-                ///============================================================
-
-                ///============================================================
-                ///Step 2. complete
-                ///============================================================
-
-                ///============================================================
-                ///Step 3. Update patch weights (and bias weights also)
-                ///============================================================
-
-                ///============================================================
-                ///Step 3. complete
-                ///============================================================
-
-            }
+            /// lerning_autencoder() will do this:
+            ///Train selected atom's procedure
+            ///Step 1. Make reconstruction
+            ///Step 2. Calculate each pixel's error. Sum up the total loss for report. Also set the hidden_delta[] for step 4
+            ///Step 3. Update patch weights (and bias_hid2out weights also)
+            ///Step 4. Update bias_in2hid regarding the hidden_delta[]
+            lerning_autencoder();///function do Step1..4
 
         }
         else
         {
             ///Not in sparse mode. No sparse constraints this mean's that all atom's in dictionary will be used to represent the reconstruction
             ///and all atom's will also be trained every cycle.
-
-            for(int i=0; i<Lx_OUT_depth; i++) ///Go through all atom's
-            {
-                train_hidden_node[i] = ReLU_function(train_hidden_node[i]);///ReLU
-                ///Train selected atom's
-                ///Step 1. Make reconstruction
-                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-                ///Step 3. Update patch weights (and bias weights also)
-
-                ///============================================================
-                ///Step 1. Make reconstruction
-                ///============================================================
-
-                ///============================================================
-                ///Step 1. complete
-                ///============================================================
-
-                ///============================================================
-                ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-                ///============================================================
-
-                ///============================================================
-                ///Step 2. complete
-                ///============================================================
-
-                ///============================================================
-                ///Step 3. Update patch weights (and bias weights also)
-                ///============================================================
-
-                ///============================================================
-                ///Step 3. complete
-                ///============================================================
-            }
+            lerning_autencoder();///function do Step1..4
         }
     }
     if(show_encoder_on_conv_cube==1)
     {
-     //   Lx_OUT_convolution_cube = cv::Scalar(0.0f);
         for(int h=0;h<K_sparse;h++)
         {
             int i=0;
