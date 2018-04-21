@@ -27,6 +27,8 @@ public:
     sparse_autoenc() {}
     virtual ~sparse_autoenc() {}
     int layer_nr;
+    float learning_rate;
+    float momentum;
     void init(void);
     void train_encoder(void);
     int show_patch_during_run;///Only for evaluation/debugging
@@ -39,7 +41,6 @@ public:
     int training_iterations;///Input parameter. Set how many training iterations (randomized positions) on one learn_encoder() function calls
     void convolve_operation(void);
     int color_mode;///1 = CV_32FC3 color mode. 0 = CV_32FC1 gray mode. color_mode = 1 is ONLY allowed to use at Layer 1
-    int use_bias;
     int init_in_from_outside;///Input Parameter. Must set to 0 when this object is the FIRST layer. MUST be = 1 when a deeper layer
     ///When init_in_from_outside = 1 then Lx_IN_data_cube is same poiner as the Lx_OUT_convolution_cube or Lx_pooling_cube of the previous layer
     int patch_side_size;///Example 7 will set up 7x7 patch at 2 Dimensions of the 3D
@@ -60,9 +61,10 @@ public:
     cv::Mat encoder_input;///depth Z = Lx_IN_depth. layer size X, Y = patch_size * patch_size
     cv::Mat denoised_residual_enc_input;///same size as encoder_input. Used when enable_denoising = 1 for noise or if Greedy encoder mode = 1 for residual
     cv::Mat reconstruct;///same size as encoder_input
+    cv::Mat enc_error;///same size as encoder_input
     cv::Mat eval_indata_patch;
     cv::Mat eval_atom_patch;
-    cv::Mat bias_in2hid;
+    cv::Mat bias_in2hid;///Column 0 = the weight. Column 1 = change weight
     cv::Mat bias_hid2out;
     float init_noise_gain;
 
@@ -92,7 +94,8 @@ protected:
 
 private:
     cv::Mat change_w_dict;///Change weight's used for update weight's
-    cv::Mat change_w_b_in2hid;///Change weight's used for update weight's
+ ///   cv::Mat change_w_b_in2hid;///Change weight's used for update weight's
+ ///   change_w_b_in2hid replaced by Column 0 = the weight. Column 1 = change weight on bias_in2hid
     cv::Mat change_w_b_hid2out;///Change weight's used for update weight's
 
     int v_dict_hight;
@@ -112,7 +115,6 @@ private:
     float *train_hidden_node;///Only used in train_encoder() function
     float *temp_hidden_node;///Used in Greedy method
     float *train_hidden_deleted_max;///Same size as train_hidden_node but erase all max value when fill score table
-    float *hidden_delta;///This is need for training bias_in2hid weights
     ///======== Set up pointers for Mat direct address (fastest operation) =============
     float *zero_ptr_dict;///Set up pointer for fast direct address of Mat
     float *index_ptr_dict;///Set up pointer for fast direct address of Mat
@@ -131,10 +133,12 @@ private:
     float *index_ptr_reconstruct;///Set up pointer for fast direct address of Mat
     float *zero_ptr_chan_w_dict;
     float *index_ptr_chan_w_dict;
-    float *zero_ptr_chan_w_b_in2hid;
-    float *index_ptr_chan_w_b_in2hid;
     float *zero_ptr_chan_w_b_hid2out;
     float *index_ptr_chan_w_b_hid2out;
+    float *zero_ptr_enc_error;
+    float *index_ptr_enc_error;
+    float *zero_ptr_bias_hid2out;
+    float *index_ptr_bias_hid2out;
     ///=================================================================================
     void insert_patch_noise(void);
     void check_dictionary_ptr_patch(void);
@@ -159,14 +163,12 @@ void sparse_autoenc::lerning_autencoder(void)
     }
 
     ///Add bias signal to reconstruction
-    if(use_bias==1)
-    {
-        reconstruct += bias_hid2out;
-    }
+    reconstruct += bias_hid2out;
 
-    index_ptr_dict = zero_ptr_dict;
+
     for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's and do ReLU non linear activation function of hidden nodes
     {
+        int at_node = 0;
         ///K_sparse could be set up to Lx_OUT_depth. If K_sparse = LxOUT_depth then there is not sparse mode
         if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
         {
@@ -186,74 +188,183 @@ void sparse_autoenc::lerning_autencoder(void)
                 printf(" i = %d hidden_node[%d] = %f\n", i, (score_table[i]), train_hidden_node[ (score_table[i]) ]);
             }
             /// ======= End evaluation ===========
+            at_node = (score_table[i]);
         }
         else
         {
             ///No sparsity Mode setting. All atom's used
             train_hidden_node[i] = ReLU_function(train_hidden_node[i]);///Do ReLU only on all hidden nodes
+            at_node = i;
         }
         ///Train selected atom's procedure
         ///Step 1. Make reconstruction
-        ///Step 2. Calculate each pixel's error. Sum up the total loss for report. Also set the hidden_delta[] for step 4
+        ///Step 2. Calculate each pixel's error. Sum up the total loss for report. Also set the hidden_delta for step 4
         ///Step 3. Update patch weights (and bias_hid2out weights also)
-        ///Step 4. Update bias_in2hid regarding the hidden_delta[]
+        ///Step 4. Update bias_in2hid regarding the hidden_delta
 
         ///============================================================
         ///Step 1. Make reconstruction from one hidden node each turn
         ///============================================================
+        ///COLOR or GRAY mode reconstruction
         index_ptr_reconstruct = zero_ptr_reconstruct;
-        if(color_mode==1)
+        index_ptr_dict = zero_ptr_dict + at_node * patch_side_size*patch_side_size*reconstruct.channels()*Lx_IN_depth;
+        for(int j=0; j<Lx_IN_depth; j++)
         {
-            ///COLOR mode reconstruction
-            int dict_start_ROW = ((score_table[i]) / sqrt_nodes_plus1) * patch_side_size*patch_side_size*dictionary.channels();
-            int dict_start_COL = ((score_table[i]) % sqrt_nodes_plus1) * patch_side_size*dictionary.channels();
-            for(int j=0; j<Lx_IN_depth; j++)
+            for(int k=0; k<patch_side_size*patch_side_size*reconstruct.channels(); k++)
             {
-                for(int k=0; k<patch_side_size*patch_side_size*reconstruct.channels(); k++)
-                {
-                    index_ptr_dict = zero_ptr_dict + dict_start_ROW + dict_start_COL + ((k/(patch_side_size*reconstruct.channels())) * sqrt_nodes_plus1 * patch_side_size * dictionary.channels()) + k%(patch_side_size*reconstruct.channels());
-                    *index_ptr_reconstruct += train_hidden_node[(score_table[i])] * (*index_ptr_dict);
-                    index_ptr_reconstruct++;
-                }
+                *index_ptr_reconstruct += train_hidden_node[at_node] * (*index_ptr_dict);
+                index_ptr_dict++;
+                index_ptr_reconstruct++;
             }
+        }
+    }
+    ///============================================================
+    ///Step 1. complete reconstruction from one hidden node
+    ///============================================================
+
+    ///============================================================
+    ///Step 2. Calculate each pixel's error. Sum up the total loss for report
+    ///============================================================
+    enc_error = encoder_input - reconstruct;       ///Calculate pixel error. encoder_input - reconstruction
+
+ //   imshow("enc_error", enc_error);
+ //   cv::waitKey(100);
+    ///============================================================
+    ///Step 2. complete
+    ///============================================================
+
+    ///====== First do weight update for bias_hid2out weights and make total_loss ==========
+    total_loss=0.0f;
+    index_ptr_enc_error     = zero_ptr_enc_error;
+    index_ptr_chan_w_b_hid2out = zero_ptr_chan_w_b_hid2out;
+    index_ptr_bias_hid2out  = zero_ptr_bias_hid2out;
+    if(color_mode==1)
+    {
+        ///Update autoencoder weight in this way;
+        ///change_weight = learning_rate * node * delta_out + momentum * change_weight;
+        ///weight        = weight + change_weight;
+        ///In this case when node = 1.0f because bias node is ALWAYS = 1. delta is = pixel error in this case when encoder used
+        ///NOTE in this case (autoencoder case) delta_out = encoder_error = (*index_ptr_enc_error)
+
+        ///COLOR mode
+        for(int k=0; k<(patch_side_size*patch_side_size*encoder_input.channels()); k++)
+        {
+            total_loss += (*index_ptr_enc_error) * (*index_ptr_enc_error);///Loss = error²
+            ///change_weight = learning_rate * node * delta_out + momentum * change_weight
+            ///weight       += change_weight
+            (*index_ptr_chan_w_b_hid2out) = learning_rate * (*index_ptr_enc_error) + momentum * (*index_ptr_chan_w_b_hid2out);
+            (*index_ptr_bias_hid2out)    += (*index_ptr_chan_w_b_hid2out);
+
+            index_ptr_bias_hid2out++;
+            index_ptr_chan_w_b_hid2out++;
+            index_ptr_enc_error++;
+        }
+    }
+    else
+    {
+        ///GRAY mode
+        for(int j=0; j<Lx_IN_depth; j++)
+        {
+            for(int k=0; k<(patch_side_size*patch_side_size); k++)
+            {
+                total_loss += (*index_ptr_enc_error) * (*index_ptr_enc_error);///Loss = error²
+                ///change_weight = learning_rate * node * delta_out + momentum * change_weight
+                ///weight        = weight + change_weight;
+                (*index_ptr_chan_w_b_hid2out) = learning_rate * (*index_ptr_enc_error) + momentum * (*index_ptr_chan_w_b_hid2out);
+                (*index_ptr_bias_hid2out)    += (*index_ptr_chan_w_b_hid2out);
+
+                index_ptr_chan_w_b_hid2out++;
+                index_ptr_enc_error++;
+            }
+        }
+    }
+    ///======= bias_hid2out weights updated and make total_loss finish ===============
+
+    for(int i=0; i<K_sparse; i++) ///
+    {
+        int addr_offset = 0;
+        float temp_train_hidd_node = 0.0;
+        ///K_sparse could be set up to Lx_OUT_depth. If K_sparse = LxOUT_depth then there is not sparse mode
+        if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
+        {
+            ///Sparse mode
+            if((score_table[i]) == -1)///Break if the score table tell that the atom's in use is less then up to K_sparse
+            {
+                break;///atom's in use this time is fewer then K_sparse
+                ///Note this break event will probably never happen if score_bottom_level is set to something less then 0.0f
+            }
+            temp_train_hidd_node = train_hidden_node[ (score_table[i]) ];///
+            addr_offset = (score_table[i]) * patch_side_size*patch_side_size*encoder_input.channels()*Lx_IN_depth;
         }
         else
         {
-            ///GRAY mode reconstruction
-            index_ptr_reconstruct = zero_ptr_reconstruct;
-            index_ptr_dict = zero_ptr_dict + (score_table[i]) * patch_side_size*patch_side_size*Lx_IN_depth;
+            ///No sparsity Mode setting. All atom's used
+            temp_train_hidd_node = train_hidden_node[i];///Use all hidden nodes
+            addr_offset = i * patch_side_size*patch_side_size*encoder_input.channels()*Lx_IN_depth;
+        }
+
+        ///====== Do dictionary weight update, make total_loss and set hidden_delta
+        index_ptr_enc_error     = zero_ptr_enc_error;
+        index_ptr_chan_w_dict   = zero_ptr_chan_w_dict + addr_offset;
+        index_ptr_dict          = zero_ptr_dict + addr_offset;
+
+        float temp_hidden_delta = 0.0f;
+        if(color_mode==1)
+        {   ///COLOR mode
+            for(int k=0; k<(patch_side_size*patch_side_size*encoder_input.channels()); k++)
+            {
+                ///delta_hid = delta_out * weight;
+                ///change_weight = learning_rate * node * delta_out + momentum * change_weight;
+                ///weight        = weight + change_weight;
+                ///NOTE in this case (autoencoder case) delta_out = encoder_error = (*index_ptr_enc_error)
+
+                ///First backprop delta to hidden_delta so it is possible to update bias_in2hid weight later.
+                temp_hidden_delta += (*index_ptr_enc_error) * (*index_ptr_chan_w_dict);
+
+                ///Now update tied weight's
+                (*index_ptr_chan_w_dict) = learning_rate * temp_train_hidd_node * (*index_ptr_enc_error) + momentum * (*index_ptr_chan_w_dict);///change_weight = learning_rate * node * delta + momentum * change_weight;
+                (*index_ptr_dict)       += (*index_ptr_chan_w_dict);///weight        = weight + change_weight;
+                index_ptr_enc_error++;
+                index_ptr_chan_w_dict++;
+                index_ptr_dict++;
+            }
+        }
+        else
+        {   ///GRAY mode
             for(int j=0; j<Lx_IN_depth; j++)
             {
-                for(int k=0; k<patch_side_size*patch_side_size; k++)
+                for(int k=0; k<(patch_side_size*patch_side_size); k++)
                 {
-                    *index_ptr_reconstruct += train_hidden_node[(score_table[i])] * (*index_ptr_dict);
-                    index_ptr_dict++;
-                    index_ptr_reconstruct++;
+                    ///same procedure as in COLOR mode above
+                    temp_hidden_delta += (*index_ptr_enc_error) * (*index_ptr_chan_w_dict);
+                    (*index_ptr_chan_w_dict) = learning_rate * temp_train_hidd_node * (*index_ptr_enc_error) + momentum * (*index_ptr_chan_w_dict);///change_weight = learning_rate * node * delta + momentum * change_weight;
+                    (*index_ptr_dict)       += (*index_ptr_chan_w_dict);///weight        = weight + change_weight;
+                    index_ptr_enc_error++;
+                    index_ptr_chan_w_dict++;
+                    index_ptr_enc_error++;
                 }
             }
         }
-        ///============================================================
-        ///Step 1. complete reconstruction from one hidden node
-        ///============================================================
 
-        ///============================================================
-        ///Step 2. Calculate each pixel's error. Sum up the total loss for report
-        ///============================================================
 
-        ///============================================================
-        ///Step 2. complete
-        ///============================================================
+        ///  Update bias_in2hid weight's from hidden_delta data
+        ///  bias_in2hid.create(Lx_OUT_depth, 2, CV_32FC1);///Column 0 = the weight. Column 1 = change weight
 
-        ///============================================================
-        ///Step 3. Update patch weights (and bias weights also)
-        ///============================================================
+        ///change_weight = learning_rate * node * delta_hid + momentum * change_weight;
+        ///weight        = weight + change_weight;
+        ///In this case when node = 1.0f because bias node is ALWAYS = 1. delta_hid is backpropagate above
 
-        ///============================================================
-        ///Step 3. complete
-        ///============================================================
-
-    }
-
+        if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
+        {
+            bias_in2hid.at<float>((score_table[i]), 1)  = learning_rate * temp_hidden_delta + momentum * bias_in2hid.at<float>((score_table[i]), 1);///Column 1 is the change weight data
+            bias_in2hid.at<float>((score_table[i]), 0) += bias_in2hid.at<float>((score_table[i]), 1);///Column 0 is the weight data. Column 1 is the change weigh
+        }
+        else
+        {
+            bias_in2hid.at<float>(i, 1)  = learning_rate * temp_hidden_delta + momentum * bias_in2hid.at<float>(i, 1);///Column 1 is the change weight data
+            bias_in2hid.at<float>(i, 0) += bias_in2hid.at<float>(i, 1);///Column 0 is the weight data. Column 1 is the change weight data
+        }
+     }
 }
 
 inline float sparse_autoenc::check_remove_Nan(float f_input)
@@ -487,6 +598,7 @@ void sparse_autoenc::train_encoder(void)
                         index_ptr_dict++;
                     }
                     ///and store the result in
+                    dot_product += bias_in2hid.at<float>(i, 1);
                     temp_hidden_node[i] = dot_product;
                 }///i<Lx_OUT_depth loop end
                 ///Do the score table
@@ -578,6 +690,7 @@ void sparse_autoenc::train_encoder(void)
                         }
                     }
                     ///and store the result in
+                    dot_product += bias_in2hid.at<float>(i, 1);
                     temp_hidden_node[i] = dot_product;
                 }///i<Lx_OUT_depth loop end
                 ///Do the score table
@@ -642,15 +755,17 @@ void sparse_autoenc::train_encoder(void)
         ///Step 1. Make reconstruction
         ///Step 2. Calculate each pixel's error. Sum up the total loss for report. Also set the hidden_delta[] for step 4
         ///Step 3. Update patch weights (and bias_hid2out weights also)
-        ///Step 4. Update bias_in2hid regarding the hidden_delta[]
+        ///Step 4. Update bias_in2hid regarding the hidden_delta
         lerning_autencoder();///function do Step1..4
 
     }
+
     else
     {
         ///NON greedy method
         if(color_mode == 1)///When color mode there is another data access of the dictionary
         {
+
             ///COLOR dictionary access
             for(int i=0; i<Lx_OUT_depth; i++)
             {
@@ -681,10 +796,7 @@ void sparse_autoenc::train_encoder(void)
                     }
                     ///=========== End copy over the input data to encoder_input =====
                 }
-                if(use_bias == 1)
-                {
-                    dot_product += bias_in2hid.at<float>(i, 1);
-                }
+                dot_product += bias_in2hid.at<float>(i, 1);
 
                 if(show_patch_during_run == 1)///Only for debugging)
                 {
@@ -695,7 +807,9 @@ void sparse_autoenc::train_encoder(void)
                 ///Put this dot product into train_hidden_node
                 train_hidden_node[i] = dot_product;
                 train_hidden_deleted_max[i] = dot_product;
+
             }
+
         }
         else
         {
@@ -738,15 +852,14 @@ void sparse_autoenc::train_encoder(void)
                         cv::waitKey(ms_patch_show);
                     }
                 }
-                if(use_bias == 1)
-                {
-                    dot_product += bias_in2hid.at<float>(i, 1);
-                }
+                dot_product += bias_in2hid.at<float>(i, 1);
                 ///Put this dot product into train_hidden_node
                 train_hidden_node[i] = dot_product;
                 train_hidden_deleted_max[i] = dot_product;
             }
         }
+
+
         if(show_encoder==1)
         {
             imshow("encoder_input", encoder_input);
@@ -785,7 +898,7 @@ void sparse_autoenc::train_encoder(void)
             ///Step 1. Make reconstruction
             ///Step 2. Calculate each pixel's error. Sum up the total loss for report. Also set the hidden_delta[] for step 4
             ///Step 3. Update patch weights (and bias_hid2out weights also)
-            ///Step 4. Update bias_in2hid regarding the hidden_delta[]
+            ///Step 4. Update bias_in2hid regarding the hidden_delta
             lerning_autencoder();///function do Step1..4
 
         }
@@ -795,7 +908,10 @@ void sparse_autoenc::train_encoder(void)
             ///and all atom's will also be trained every cycle.
             lerning_autencoder();///function do Step1..4
         }
+
+
     }
+
     if(show_encoder_on_conv_cube==1)
     {
         for(int h=0;h<K_sparse;h++)
@@ -807,12 +923,21 @@ void sparse_autoenc::train_encoder(void)
             }
             else
             {
+                if(K_sparse != Lx_OUT_depth)
+                {
                 i = score_table[h];
+
+                }
+                else
+                {
+                    i = h;
+                }
                 index_ptr_Lx_OUT_conv = zero_ptr_Lx_OUT_conv + (i * Lx_OUT_widht * Lx_OUT_hight) + (patch_row_offset * Lx_OUT_widht) + (patch_col_offset);
                 *index_ptr_Lx_OUT_conv = train_hidden_node[i];
             }
         }
     }
+
     convolution_mode = 0;
 
 }
@@ -953,29 +1078,25 @@ void sparse_autoenc::init(void)
         encoder_input.create     (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC3);
         denoised_residual_enc_input.create(patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC3);
         reconstruct.create       (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC3);
+        enc_error.create       (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC3);
         printf("This layer First Layer init_in_from_outside = %d\n", init_in_from_outside);
         Lx_IN_data_cube.create(Lx_IN_hight, Lx_IN_widht, CV_32FC3);
         printf("Lx_IN_data_cube are now created in COLOR mode CV_32FC3\n");
-        if(use_bias == 1)
+        bias_hid2out.create(patch_side_size, patch_side_size, CV_32FC3);
+        change_w_b_hid2out.create(patch_side_size, patch_side_size, CV_32FC3);
+        change_w_b_hid2out = cv::Scalar(0.0f, 0.0f, 0.0f);
+        for(int i=0; i<patch_side_size; i++)
         {
-            bias_hid2out.create(patch_side_size, patch_side_size, CV_32FC3);
-            change_w_b_hid2out.create(patch_side_size, patch_side_size, CV_32FC3);
-            change_w_b_hid2out = cv::Scalar(0.0f, 0.0f, 0.0f);
-            for(int i=0;i<patch_side_size;i++)
+            for(int j=0; j<patch_side_size*3; j++)
             {
-                for(int j=0;j<patch_side_size*3;j++)
-                {
-                    bias_hid2out.at<float>(i,j) = get_noise();
-                }
+                bias_hid2out.at<float>(i,j) = get_noise();
             }
-            printf("bias_hid2out are now created in COLOR mode CV_32FC3\n");
-            bias_in2hid.create(Lx_OUT_depth, 1, CV_32FC1);
-            change_w_b_in2hid.create(Lx_OUT_depth, 1, CV_32FC1);
-            change_w_b_in2hid = cv::Scalar(0.0f);
-            for(int i=0;i<Lx_OUT_depth;i++)
-            {
-                bias_in2hid.at<float>(i, 0) = get_noise();
-            }
+        }
+        printf("bias_hid2out are now created in COLOR mode CV_32FC3\n");
+        bias_in2hid.create(Lx_OUT_depth, 2, CV_32FC1);///Column 0 = the weight. Column 1 = change weight
+        for(int i=0; i<Lx_OUT_depth; i++)
+        {
+            bias_in2hid.at<float>(i, 0) = get_noise();
         }
     }
     else
@@ -994,6 +1115,7 @@ void sparse_autoenc::init(void)
         encoder_input.create     (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC1);
         denoised_residual_enc_input.create(patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC1);
         reconstruct.create       (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC1);
+        enc_error.create       (patch_side_size * Lx_IN_depth, patch_side_size, CV_32FC1);
         if(init_in_from_outside == 1)
         {
             printf("This layer is a init_in_from_outside = %d\n", init_in_from_outside);
@@ -1008,30 +1130,24 @@ void sparse_autoenc::init(void)
             Lx_IN_data_cube.create(Lx_IN_hight * Lx_IN_depth, Lx_IN_widht, CV_32FC1);
             printf("Lx_IN_data_cube are now created in GRAY mode CV_32FC1\n");
         }
-        if(use_bias == 1)
+        bias_hid2out.create(patch_side_size  * Lx_IN_depth, patch_side_size, CV_32FC1);
+        change_w_b_hid2out.create(patch_side_size  * Lx_IN_depth, patch_side_size, CV_32FC1);
+        change_w_b_hid2out = cv::Scalar(0.0f);
+        for(int h=0; h<Lx_IN_depth; h++)
         {
-            hidden_delta = new float[Lx_OUT_depth];///Need for training bias_in2hid weight's
-            bias_hid2out.create(patch_side_size  * Lx_IN_depth, patch_side_size, CV_32FC1);
-            change_w_b_hid2out.create(patch_side_size  * Lx_IN_depth, patch_side_size, CV_32FC1);
-            change_w_b_hid2out = cv::Scalar(0.0f);
-            for(int h=0; h<Lx_IN_depth; h++)
+            for(int i=0; i<patch_side_size; i++)
             {
-                for(int i=0; i<patch_side_size; i++)
+                for(int j=0; j<patch_side_size; j++)
                 {
-                    for(int j=0; j<patch_side_size; j++)
-                    {
-                        bias_hid2out.at<float>(h*patch_side_size + i,j) = get_noise();
-                    }
+                    bias_hid2out.at<float>(h*patch_side_size + i,j) = get_noise();
                 }
             }
-            printf("bias_hid2out are now created in GRAY mode CV_32FC1\n");
-            bias_in2hid.create(Lx_OUT_depth, 1, CV_32FC1);
-            change_w_b_in2hid.create(Lx_OUT_depth, 1, CV_32FC1);
-            change_w_b_in2hid = cv::Scalar(0.0f);
-            for(int i=0;i<Lx_OUT_depth;i++)
-            {
-                bias_in2hid.at<float>(i, 0) = get_noise();
-            }
+        }
+        printf("bias_hid2out are now created in GRAY mode CV_32FC1\n");
+        bias_in2hid.create(Lx_OUT_depth, 2, CV_32FC1);///Column 0 = the weight. Column 1 = change weight
+        for(int i=0; i<Lx_OUT_depth; i++)
+        {
+            bias_in2hid.at<float>(i, 0) = get_noise();
         }
         if(show_patch_during_run == 1)///Only for debugging)
         {
@@ -1101,6 +1217,14 @@ void sparse_autoenc::init(void)
     index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///Set up pointer for fast direct address of Mat
     zero_ptr_reconstruct   = reconstruct.ptr<float>(0);///Set up pointer for fast direct address of Mat
     index_ptr_reconstruct  = zero_ptr_reconstruct;///Set up pointer for fast direct address of Mat
+    zero_ptr_enc_error     = enc_error.ptr<float>(0);///
+    index_ptr_enc_error    = zero_ptr_enc_error;
+    zero_ptr_bias_hid2out  = bias_hid2out.ptr<float>(0);///
+    index_ptr_bias_hid2out = zero_ptr_bias_hid2out;
+    zero_ptr_chan_w_b_hid2out = change_w_b_hid2out.ptr<float>(0);///
+    index_ptr_chan_w_b_hid2out= zero_ptr_chan_w_b_hid2out;
+    zero_ptr_chan_w_dict   = change_w_dict.ptr<float>(0);///
+    index_ptr_chan_w_dict  = zero_ptr_chan_w_dict;
     ///=================================================================================
     if(color_mode == 1)
     {

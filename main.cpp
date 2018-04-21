@@ -26,9 +26,11 @@ int main()
 
 
     cnn_autoenc_layer1.show_patch_during_run = 1;///Only for debugging
-    cnn_autoenc_layer1.use_greedy_enc_method = 1;///
+    cnn_autoenc_layer1.use_greedy_enc_method = 0;///
     cnn_autoenc_layer1.show_encoder_on_conv_cube = 1;
     cnn_autoenc_layer1.show_encoder = 0;
+    cnn_autoenc_layer1.learning_rate = 0.002;
+    cnn_autoenc_layer1.momentum = 0.0;
     cnn_autoenc_layer1.init_in_from_outside = 0;///When init_in_from_outside = 1 then Lx_IN_data_cube is same poiner as the Lx_OUT_convolution_cube of the previous layer
     cnn_autoenc_layer1.color_mode          = 1;///color_mode = 1 is ONLY allowed to use at Layer 1
     cnn_autoenc_layer1.patch_side_size     = 7;
@@ -40,14 +42,13 @@ int main()
     cnn_autoenc_layer1.Lx_IN_hight         = CIFAR_object.CIFAR_height;///Convolution cube hight of data
     cnn_autoenc_layer1.Lx_IN_widht         = CIFAR_object.CIFAR_width;///Convolution cube width of data
     cnn_autoenc_layer1.e_stop_threshold    = 30.0f;
-    cnn_autoenc_layer1.K_sparse            = cnn_autoenc_layer1.Lx_OUT_depth / 4;
-    //cnn_autoenc_layer1.K_sparse            = 2;
+    cnn_autoenc_layer1.K_sparse            = cnn_autoenc_layer1.Lx_OUT_depth / 2;
+    cnn_autoenc_layer1.K_sparse            = cnn_autoenc_layer1.Lx_OUT_depth;
     cnn_autoenc_layer1.use_dynamic_penalty = 0;
     cnn_autoenc_layer1.penalty_add         = 0.0f;
-    cnn_autoenc_layer1.init_noise_gain     = 0.55f;///
+    cnn_autoenc_layer1.init_noise_gain     = 0.15f;///
     cnn_autoenc_layer1.enable_denoising    = 0;
     cnn_autoenc_layer1.denoising_percent   = 50;///0..100
-    cnn_autoenc_layer1.use_bias = 1;
     cnn_autoenc_layer1.use_leak_relu = 1;
     cnn_autoenc_layer1.score_bottom_level = -1000.0f;
     cnn_autoenc_layer1.use_variable_leak_relu = 1;
@@ -89,7 +90,6 @@ int main()
     cnn_autoenc_layer2.init_noise_gain = 0.15f;///
     cnn_autoenc_layer2.enable_denoising = 0;
     cnn_autoenc_layer2.denoising_percent = 50;///0..100
-    cnn_autoenc_layer2.use_bias = 1;
     cnn_autoenc_layer2.use_leak_relu = 1;
     cnn_autoenc_layer2.score_bottom_level = -1000.0f;
     cnn_autoenc_layer2.use_variable_leak_relu = 0;
@@ -103,13 +103,21 @@ int main()
   ///  cv::imshow("L2 IN cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
   ///  cv::imshow("L2 OUT cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
 
-    cv::waitKey(1);
-    while(1)
-    {
-      //  CIFAR_object.insert_a_random_CIFAR_image();
         cnn_autoenc_layer1.random_change_ReLU_leak_variable();
         cnn_autoenc_layer1.train_encoder();
+    printf("DEBUGG\n");
+
         cnn_autoenc_layer2.train_encoder();
+
+    cv::waitKey(1);
+     while(1)
+    {
+        CIFAR_object.insert_a_random_CIFAR_image();
+      cnn_autoenc_layer1.copy_dictionary2visual_dict();
+      cnn_autoenc_layer2.copy_dictionary2visual_dict();
+        cnn_autoenc_layer1.random_change_ReLU_leak_variable();
+        cnn_autoenc_layer1.train_encoder();
+        //cnn_autoenc_layer2.train_encoder();
         cv::imshow("Visual_dict_L2", cnn_autoenc_layer2.visual_dict);
         cv::imshow("L2_IN_cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
         cv::imshow("L2_OUT_cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
