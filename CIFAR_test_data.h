@@ -16,6 +16,7 @@ class CIFAR_test_data
         void init_CIFAR(void);
         void insert_a_random_CIFAR_image(void);
         int CIFAR_height;///Output parameter
+        int print_CIFAR_nr;
         int CIFAR_width;///Output parameter
         int nr_of_CIFAR_file_bytes;///Output parameter. Filled with relevant value when a function call get_CIFAR_file_size() is done.
         char* CIFAR_data;

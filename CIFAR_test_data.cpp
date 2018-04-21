@@ -80,9 +80,10 @@ void CIFAR_test_data::insert_a_random_CIFAR_image(void)
 ///    insert_L1_IN_data_cube.at<float>(7, 2) = 1.0;/// 2 column = Red
     ///==============================================
     CIFAR_nr = (int) (rand() % CIFAR_nr_of_img_p_batch);
-   // CIFAR_nr = 0;
-    printf("Load CIFAR_nr = %d to insert_L1_IN_data_cube\n", CIFAR_nr);
-
+    if(print_CIFAR_nr == 1)
+    {
+        printf("Load CIFAR_nr = %d to insert_L1_IN_data_cube\n", CIFAR_nr);
+    }
     float pixel_data=0.0f;
     uint8_t pixel_8d=0;
 

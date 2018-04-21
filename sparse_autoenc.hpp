@@ -16,8 +16,8 @@ const int MAX_DEPTH = 9999;
 
 /// ======== Things for evaluation only ==========
 const int ms_patch_show = 1;
-int pause_score_print_ms = 5000;
-int ON_OFF_print_score = 0;
+int pause_score_print_ms = 100;
+int ON_OFF_print_score = 1;
 int print_variable_relu_leak = 0;
 /// ==============================================
 
@@ -29,11 +29,11 @@ public:
     int layer_nr;
     float learning_rate;
     float momentum;
+    float residual_gain;
     void init(void);
     void train_encoder(void);
     int show_patch_during_run;///Only for evaluation/debugging
     int show_encoder_on_conv_cube;///Only for debugging
-    int show_encoder;
     void copy_visual_dict2dictionary(void);
     void copy_dictionary2visual_dict(void);
     float ReLU_function(float);
@@ -90,6 +90,8 @@ public:
     int denoising_percent;///Input parameter 0..100
 ///
     int use_greedy_enc_method;///Use Greedy encoder selection of atom's take longer time but better solver. If enabled the cv::Mat denoised_residual_enc_input used
+    float encoder_loss;
+    float get_noise(void);
 protected:
 
 private:
@@ -143,8 +145,7 @@ private:
     void insert_patch_noise(void);
     void check_dictionary_ptr_patch(void);
     void print_score_table_f(void);
-    float total_loss;
-    float get_noise(void);
+
     float check_remove_Nan(float);
     void lerning_autencoder(void);
 
@@ -159,7 +160,7 @@ void sparse_autoenc::lerning_autencoder(void)
     }
     else
     {
-        reconstruct = cv::Scalar(0.5f);///Start with a neutral (gray) image
+        reconstruct = cv::Scalar(0.0f);///Start with a neutral (gray) image
     }
 
     ///Add bias signal to reconstruction
@@ -182,12 +183,6 @@ void sparse_autoenc::lerning_autencoder(void)
             ///-- ReLU --
             train_hidden_node[ (score_table[i]) ] = ReLU_function(train_hidden_node[ (score_table[i]) ]);///Do ReLU only on selected active hidden nodes
             ///----------
-            /// ======= Only for evaluation =========
-            if(ON_OFF_print_score == 1)
-            {
-                printf(" i = %d hidden_node[%d] = %f\n", i, (score_table[i]), train_hidden_node[ (score_table[i]) ]);
-            }
-            /// ======= End evaluation ===========
             at_node = (score_table[i]);
         }
         else
@@ -233,23 +228,24 @@ void sparse_autoenc::lerning_autencoder(void)
     ///Step 2. complete
     ///============================================================
 
-    ///====== First do weight update for bias_hid2out weights and make total_loss ==========
-    total_loss=0.0f;
+    ///====== First do weight update for bias_hid2out weights and make encoder_loss ==========
+    encoder_loss=0.0f;
     index_ptr_enc_error     = zero_ptr_enc_error;
     index_ptr_chan_w_b_hid2out = zero_ptr_chan_w_b_hid2out;
     index_ptr_bias_hid2out  = zero_ptr_bias_hid2out;
-    if(color_mode==1)
-    {
-        ///Update autoencoder weight in this way;
-        ///change_weight = learning_rate * node * delta_out + momentum * change_weight;
-        ///weight        = weight + change_weight;
-        ///In this case when node = 1.0f because bias node is ALWAYS = 1. delta is = pixel error in this case when encoder used
-        ///NOTE in this case (autoencoder case) delta_out = encoder_error = (*index_ptr_enc_error)
 
-        ///COLOR mode
+    ///Update autoencoder weight in this way;
+    ///change_weight = learning_rate * node * delta_out + momentum * change_weight;
+    ///weight        = weight + change_weight;
+    ///In this case when node = 1.0f because bias node is ALWAYS = 1. delta is = pixel error in this case when encoder used
+    ///NOTE in this case (autoencoder case) delta_out = encoder_error = (*index_ptr_enc_error)
+
+    ///COLOR or GRAY mode
+    for(int j=0; j<Lx_IN_depth; j++)
+    {
         for(int k=0; k<(patch_side_size*patch_side_size*encoder_input.channels()); k++)
         {
-            total_loss += (*index_ptr_enc_error) * (*index_ptr_enc_error);///Loss = error²
+            encoder_loss += (*index_ptr_enc_error) * (*index_ptr_enc_error);///Loss = error²
             ///change_weight = learning_rate * node * delta_out + momentum * change_weight
             ///weight       += change_weight
             (*index_ptr_chan_w_b_hid2out) = learning_rate * (*index_ptr_enc_error) + momentum * (*index_ptr_chan_w_b_hid2out);
@@ -260,25 +256,7 @@ void sparse_autoenc::lerning_autencoder(void)
             index_ptr_enc_error++;
         }
     }
-    else
-    {
-        ///GRAY mode
-        for(int j=0; j<Lx_IN_depth; j++)
-        {
-            for(int k=0; k<(patch_side_size*patch_side_size); k++)
-            {
-                total_loss += (*index_ptr_enc_error) * (*index_ptr_enc_error);///Loss = error²
-                ///change_weight = learning_rate * node * delta_out + momentum * change_weight
-                ///weight        = weight + change_weight;
-                (*index_ptr_chan_w_b_hid2out) = learning_rate * (*index_ptr_enc_error) + momentum * (*index_ptr_chan_w_b_hid2out);
-                (*index_ptr_bias_hid2out)    += (*index_ptr_chan_w_b_hid2out);
-
-                index_ptr_chan_w_b_hid2out++;
-                index_ptr_enc_error++;
-            }
-        }
-    }
-    ///======= bias_hid2out weights updated and make total_loss finish ===============
+    ///======= bias_hid2out weights updated and make encoder_loss finish ===============
 
     for(int i=0; i<K_sparse; i++) ///
     {
@@ -303,14 +281,16 @@ void sparse_autoenc::lerning_autencoder(void)
             addr_offset = i * patch_side_size*patch_side_size*encoder_input.channels()*Lx_IN_depth;
         }
 
-        ///====== Do dictionary weight update, make total_loss and set hidden_delta
+        ///====== Do dictionary weight update, make encoder_loss and set hidden_delta
         index_ptr_enc_error     = zero_ptr_enc_error;
         index_ptr_chan_w_dict   = zero_ptr_chan_w_dict + addr_offset;
         index_ptr_dict          = zero_ptr_dict + addr_offset;
 
         float temp_hidden_delta = 0.0f;
-        if(color_mode==1)
-        {   ///COLOR mode
+        ///COLOR or GRAY mode
+        for(int j=0; j<Lx_IN_depth; j++)
+        {
+
             for(int k=0; k<(patch_side_size*patch_side_size*encoder_input.channels()); k++)
             {
                 ///delta_hid = delta_out * weight;
@@ -329,24 +309,6 @@ void sparse_autoenc::lerning_autencoder(void)
                 index_ptr_dict++;
             }
         }
-        else
-        {   ///GRAY mode
-            for(int j=0; j<Lx_IN_depth; j++)
-            {
-                for(int k=0; k<(patch_side_size*patch_side_size); k++)
-                {
-                    ///same procedure as in COLOR mode above
-                    temp_hidden_delta += (*index_ptr_enc_error) * (*index_ptr_chan_w_dict);
-                    (*index_ptr_chan_w_dict) = learning_rate * temp_train_hidd_node * (*index_ptr_enc_error) + momentum * (*index_ptr_chan_w_dict);///change_weight = learning_rate * node * delta + momentum * change_weight;
-                    (*index_ptr_dict)       += (*index_ptr_chan_w_dict);///weight        = weight + change_weight;
-                    index_ptr_enc_error++;
-                    index_ptr_chan_w_dict++;
-                    index_ptr_enc_error++;
-                }
-            }
-        }
-
-
         ///  Update bias_in2hid weight's from hidden_delta data
         ///  bias_in2hid.create(Lx_OUT_depth, 2, CV_32FC1);///Column 0 = the weight. Column 1 = change weight
 
@@ -536,13 +498,15 @@ inline void sparse_autoenc::print_score_table_f(void)
                 {
                     if((score_table[i]) == -1)
                     {
-                        printf("score_table[%d] = %d\n", i, score_table[i]);
+                        break;
+                       // printf("score_table[%d] = %d\n", i, score_table[i]);
                     }
                     else
                     {
                         printf("score_table[%d] = %d node = %f\n", i, score_table[i], train_hidden_node[(score_table[i])]);
                     }
                 }
+                printf("=========================\n");
                 cv::waitKey(pause_score_print_ms);
             }
             /// ======= End evaluation ===========
@@ -565,12 +529,19 @@ void sparse_autoenc::train_encoder(void)
         {
             score_table[i] = -1;///Clear the table
         }
-        if(color_mode == 1)///When color mode there is another data access of the dictionary
+        ///First copy over Lx_IN_data to Mat encoder_input and denoised_residual_enc_input
+        for(int j=0; j<Lx_IN_depth; j++)
         {
-            ///First copy over Lx_IN_data to Mat encoder_input and denoised_residual_enc_input
             for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
             {
-                index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((patch_row_offset + k/(patch_side_size*dictionary.channels())) * (Lx_IN_widht * Lx_IN_data_cube.channels()) + (k%(patch_side_size*dictionary.channels())) + (patch_col_offset * Lx_IN_data_cube.channels()));
+                if(color_mode == 1)
+                {
+                    index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((patch_row_offset + k/(patch_side_size*dictionary.channels())) * (Lx_IN_widht * Lx_IN_data_cube.channels()) + (k%(patch_side_size*dictionary.channels())) + (patch_col_offset * Lx_IN_data_cube.channels()));
+                }
+                else
+                {
+                    index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((j * Lx_IN_hight * Lx_IN_widht) + ((patch_row_offset + k/patch_side_size) * Lx_IN_widht) + (k%patch_side_size) + (patch_col_offset));
+                }
                 ///=========== Copy over the input data to encoder_input =========
                 *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
                 *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
@@ -579,177 +550,86 @@ void sparse_autoenc::train_encoder(void)
                 index_ptr_deno_residual_enc++;
                 ///=========== End copy over the input data to encoder_input =====
             }
-
-            for(int h=0; h<K_sparse; h++)///Run through K_sparse time and select by Greedy method and make residual each h turn
+        }
+        for(int h=0; h<K_sparse; h++)///Run through K_sparse time and select by Greedy method and make residual each h turn
+        {
+            index_ptr_dict          = zero_ptr_dict;///Set dictionary Mat pointer to start point
+            ///COLOR dictionary access
+            for(int i=0; i<Lx_OUT_depth; i++)
             {
-                index_ptr_dict          = zero_ptr_dict;///Set dictionary Mat pointer to start point
-                ///COLOR dictionary access
-                for(int i=0; i<Lx_OUT_depth; i++)
+                index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
+                dot_product = 0.0f;
+                ///Make dot product between dictionary and index_ptr_deno_residual_enc
+                ///and store the result in
+                ///temp_hidden_node[i] = dot_product;
+                for(int j=0; j<Lx_IN_depth; j++)
                 {
-                    index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
-                    dot_product = 0.0f;
-                    ///Make dot product between dictionary and index_ptr_deno_residual_enc
-                    ///and store the result in
-                    ///temp_hidden_node[i] = dot_product;
+
                     for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
                     {
                         dot_product += (*index_ptr_deno_residual_enc) * (*index_ptr_dict);
                         index_ptr_deno_residual_enc++;
                         index_ptr_dict++;
                     }
-                    ///and store the result in
-                    dot_product += bias_in2hid.at<float>(i, 1);
-                    temp_hidden_node[i] = dot_product;
-                }///i<Lx_OUT_depth loop end
-                ///Do the score table
-                ///Make the score table, select out by score on order the K_sparse strongest atom's of the dictionary
-                ///h will Search through the most strongest atom's
+                }
+                ///and store the result in
+                dot_product += bias_in2hid.at<float>(i, 0);
+                temp_hidden_node[i] = dot_product;
+            }///i<Lx_OUT_depth loop end
+            ///Do the score table
+            ///Make the score table, select out by score on order the K_sparse strongest atom's of the dictionary
+            ///h will Search through the most strongest atom's
 
-                max_temp = score_bottom_level;
-                int strongest_atom_nr = -1;
-                for(int j=0; j<Lx_OUT_depth; j++)
+            max_temp = score_bottom_level;
+            int strongest_atom_nr = -1;
+            for(int j=0; j<Lx_OUT_depth; j++)
+            {
+                if(max_temp < (temp_hidden_node[j]))
                 {
-                    if(max_temp < (temp_hidden_node[j]))
-                    {
-                        max_temp = (temp_hidden_node[j]);
-                        strongest_atom_nr = j;
-                    }
+                    max_temp = (temp_hidden_node[j]);
+                    strongest_atom_nr = j;
                 }
-                if(strongest_atom_nr == -1)
-                {
-                    score_table[h] = -1;///No atom's was stronger then score_bottom_level.
-                    break;///No more sparse all atom's was below score_bottom_level.
-                }
-                else
-                {
-                    score_table[h] = strongest_atom_nr;///h is the K_sparse loop counter
-                }
-                if(-1 < strongest_atom_nr && strongest_atom_nr < Lx_OUT_depth)
-                {
-                    index_ptr_dict              = zero_ptr_dict + strongest_atom_nr * (patch_side_size*patch_side_size*dictionary.channels());///Set dictionary Mat pointer to start point
-                }
-                else
-                {
-                    printf("ERROR! strongest_atom_nr = %d is outside range\n", strongest_atom_nr);
-                    exit(0);
-                }
+            }
+            if(strongest_atom_nr == -1)
+            {
+                score_table[h] = -1;///No atom's was stronger then score_bottom_level.
+                break;///No more sparse all atom's was below score_bottom_level.
+            }
+            else
+            {
+                score_table[h] = strongest_atom_nr;///h is the K_sparse loop counter
+            }
+            if(-1 < strongest_atom_nr && strongest_atom_nr < Lx_OUT_depth)
+            {
+                index_ptr_dict              = zero_ptr_dict + strongest_atom_nr * (patch_side_size*patch_side_size*dictionary.channels()*Lx_IN_depth);///Set dictionary Mat pointer to start point
+            }
+            else
+            {
+                printf("ERROR! strongest_atom_nr = %d is outside range\n", strongest_atom_nr);
+                exit(0);
+            }
 
-                index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
-                ///Update residual data regarding the last selected atom's
-                for(int i=0;i<(patch_side_size*patch_side_size*dictionary.channels());i++)
+            index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
+            ///Update residual data regarding the last selected atom's
+
+            for(int i=0; i<Lx_IN_depth; i++)
+            {
+                for(int j=0; j<(patch_side_size*patch_side_size*dictionary.channels()); j++)
                 {
-                    *index_ptr_deno_residual_enc -= (*index_ptr_dict) * temp_hidden_node[strongest_atom_nr];
+                    *index_ptr_deno_residual_enc -= (*index_ptr_dict) * temp_hidden_node[strongest_atom_nr] * residual_gain;
                     index_ptr_deno_residual_enc++;
                     index_ptr_dict++;
                 }
-                train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
-            }///h<K_sparse loop end
-            /// ======= Only for evaluation =========
-            print_score_table_f();
-            /// ======= End evaluation ===========
-        }
-        else
-        {
-            ///GRAY dictionary access
-            ///First copy over Lx_IN_data to Mat encoder_input and denoised_residual_enc_input
-
-            for(int j=0; j<Lx_IN_depth; j++)
-            {
-                for(int k=0; k<(patch_side_size*patch_side_size); k++)
-                {
-                    index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((j * Lx_IN_hight * Lx_IN_widht) + ((patch_row_offset + k/patch_side_size) * Lx_IN_widht) + (k%patch_side_size) + (patch_col_offset));
-
-                    ///=========== Copy over the input data to encoder_input =========
-                    *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
-                    *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
-///TODO add denoising on *index_ptr_deno_residual_enc
-                    index_ptr_encoder_input++;
-                    index_ptr_deno_residual_enc++;
-                    ///=========== End copy over the input data to encoder_input =====
-                }
             }
-
-            for(int h=0; h<K_sparse; h++)///Run through K_sparse time and select by Greedy method and make residual each h turn
-            {
-                index_ptr_dict          = zero_ptr_dict;///Set dictionary Mat pointer to start point
-                ///GRAY dictionary access
-                for(int i=0; i<Lx_OUT_depth; i++)
-                {
-                    index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
-                    dot_product = 0.0f;
-                    ///Make dot product between dictionary and index_ptr_deno_residual_enc
-                    ///and store the result in
-                    ///temp_hidden_node[i] = dot_product;
-                    for(int j=0; j<Lx_IN_depth; j++)///Need input depth when GRAY dictionary access
-                    {
-                        for(int k=0; k<(patch_side_size*patch_side_size); k++)
-                        {
-                            dot_product += (*index_ptr_deno_residual_enc) * (*index_ptr_dict);
-                            index_ptr_deno_residual_enc++;
-                            index_ptr_dict++;
-                        }
-                    }
-                    ///and store the result in
-                    dot_product += bias_in2hid.at<float>(i, 1);
-                    temp_hidden_node[i] = dot_product;
-                }///i<Lx_OUT_depth loop end
-                ///Do the score table
-                ///Make the score table, select out by score on order the K_sparse strongest atom's of the dictionary
-                ///h will Search through the most strongest atom's
-
-                max_temp = score_bottom_level;
-                int strongest_atom_nr = -1;
-                for(int j=0; j<Lx_OUT_depth; j++)
-                {
-                    if(max_temp < (temp_hidden_node[j]))
-                    {
-                        max_temp = (temp_hidden_node[j]);
-                        strongest_atom_nr = j;
-                    }
-                }
-                if(strongest_atom_nr == -1)
-                {
-                    score_table[h] = -1;///No atom's was stronger then score_bottom_level.
-                    break;///No more sparse all atom's was below score_bottom_level.
-                }
-                else
-                {
-                    score_table[h] = strongest_atom_nr;///h is the K_sparse loop counter
-                }
-                if(-1 < strongest_atom_nr && strongest_atom_nr < Lx_OUT_depth)
-                {
-                    index_ptr_dict              = zero_ptr_dict + strongest_atom_nr * (patch_side_size*patch_side_size*Lx_IN_depth);///Set dictionary Mat pointer to start point
-                }
-                else
-                {
-                    printf("ERROR! strongest_atom_nr = %d is outside range\n", strongest_atom_nr);
-                    exit(0);
-                }
-                index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
-                ///Update residual data regarding the last selected atom's
-                for(int i=0;i<Lx_IN_depth;i++)
-                {
-                    for(int j=0; j<(patch_side_size*patch_side_size); j++)
-                    {
-                        *index_ptr_deno_residual_enc -= (*index_ptr_dict) * temp_hidden_node[strongest_atom_nr];
-                        index_ptr_deno_residual_enc++;
-                        index_ptr_dict++;
-                    }
-                }
-                train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
-            }///h<K_sparse loop end
-            /// ======= Only for evaluation =========
-            print_score_table_f();
-            /// ======= End evaluation ===========
-        }
+            train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
+        }///h<K_sparse loop end
+        /// ======= Only for evaluation =========
+        print_score_table_f();
+        /// ======= End evaluation ===========
 ///============= End Dot product and score table in Greedy mode ============
 ///=============
-        if(show_encoder==1)
-        {
-            imshow("encoder_input", encoder_input);
-        }
 
-        total_loss = 0.0f;///Clear
+        encoder_loss = 0.0f;///Clear
         /// lerning_autencoder() will do this:
         ///Train selected atom's procedure
         ///Step 1. Make reconstruction
@@ -796,7 +676,7 @@ void sparse_autoenc::train_encoder(void)
                     }
                     ///=========== End copy over the input data to encoder_input =====
                 }
-                dot_product += bias_in2hid.at<float>(i, 1);
+                dot_product += bias_in2hid.at<float>(i, 0);
 
                 if(show_patch_during_run == 1)///Only for debugging)
                 {
@@ -852,7 +732,7 @@ void sparse_autoenc::train_encoder(void)
                         cv::waitKey(ms_patch_show);
                     }
                 }
-                dot_product += bias_in2hid.at<float>(i, 1);
+                dot_product += bias_in2hid.at<float>(i, 0);
                 ///Put this dot product into train_hidden_node
                 train_hidden_node[i] = dot_product;
                 train_hidden_deleted_max[i] = dot_product;
@@ -860,12 +740,7 @@ void sparse_autoenc::train_encoder(void)
         }
 
 
-        if(show_encoder==1)
-        {
-            imshow("encoder_input", encoder_input);
-        }
-
-        total_loss = 0.0f;///Clear
+        encoder_loss = 0.0f;///Clear
         if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
         {
             for(int i=0; i<Lx_OUT_depth; i++) ///-1 tell that this will not used
@@ -989,6 +864,12 @@ void sparse_autoenc::init(void)
     printf("Layer_nr = %d\n", layer_nr);
     printf("*****************************\n");
 
+    if(K_sparse == Lx_OUT_depth && use_greedy_enc_method == 1)
+    {
+       K_sparse = Lx_OUT_depth - 1;
+       printf("WARNING K_sparse is subtracted by 1 to = %d\n", K_sparse);
+       printf("because use_greedy_enc_method = 1 and K_sparse was set equal to Lx_OUT_depth \n");
+    }
     if(layer_nr < 1 || layer_nr > 99)
     {
         printf("ERROR! layer_nr = %d is out of range 1..99\n", layer_nr);
@@ -1304,11 +1185,23 @@ void sparse_autoenc::init(void)
         score_bottom_level = 0.0f;
     }
     printf("Init CNN layer object Done!\n");
+    printf("*** END settings of *********\n");
+    printf("Layer_nr = %d\n", layer_nr);
+    printf("*****************************\n");
+    printf("\n");
+
 }
 
 void sparse_autoenc::k_sparse_sanity_check(void)
 {
     ///============= K_sparse sanity check =============
+    if(K_sparse == Lx_OUT_depth && use_greedy_enc_method == 1)
+    {
+       K_sparse = Lx_OUT_depth - 1;
+       printf("WARNING K_sparse is subtracted by 1 to = %d\n", K_sparse);
+       printf("because use_greedy_enc_method = 1 and K_sparse was set equal to Lx_OUT_depth \n");
+    }
+
     if(sparse_autoenc::K_sparse < 1)
     {
         printf("ERROR! K_sparse = %d < 1\n", sparse_autoenc::K_sparse);
@@ -1327,10 +1220,6 @@ void sparse_autoenc::k_sparse_sanity_check(void)
     ///============= End K_sparse sanity check =============
     //printf("K_sparse OK = %d\n", K_sparse);
 
-    printf("*** END settings of *********\n");
-    printf("Layer_nr = %d\n", layer_nr);
-    printf("*****************************\n");
-    printf("\n");
 
 }
 
