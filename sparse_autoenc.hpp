@@ -150,7 +150,8 @@ private:
 
     float check_remove_Nan(float);
     void lerning_autencoder(void);
-
+    void insert_enc_noise(int);
+    int noise_probablity;/// noise_probablity = (65535 * denoising_percent) / 100;
 
 };
 void sparse_autoenc::lerning_autencoder(void)
@@ -524,6 +525,52 @@ inline void sparse_autoenc::print_score_table_f(void)
             }
             /// ======= End evaluation ===========
 }
+inline void sparse_autoenc::insert_enc_noise(int k)
+{
+    static int chose_nois_dice = 0;
+    static float salt_pepper_noise = 0.0f;
+    if(enable_denoising == 1)
+    {
+        if(dictionary.channels() == 3)///Color mode
+        {
+            if((k%3) == 0)
+            {
+                chose_nois_dice = (rand() % 65535);//0..65535 range
+                salt_pepper_noise = (float) (rand() % 65535) / 65536;//
+            }
+
+            if(chose_nois_dice < noise_probablity)
+            {
+                ///This pixel should contain noise;
+                *index_ptr_deno_residual_enc = salt_pepper_noise;//0..1.0 range
+            }
+            else
+            {
+                *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+            }
+
+        }
+        else
+        {
+            int chose_nois_dice = (rand() % 65535);//0..65535 range
+            if(chose_nois_dice < noise_probablity)
+            {
+                ///This pixel should contain noise;
+                *index_ptr_deno_residual_enc = (float) (rand() % 65535) / 65536;//0..1.0 range
+            }
+            else
+            {
+                *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+            }
+
+        }
+    }
+    else
+    {
+        *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+    }
+}
+
 void sparse_autoenc::train_encoder(void)
 {
     float dot_product = 0.0f;
@@ -535,7 +582,7 @@ void sparse_autoenc::train_encoder(void)
     index_ptr_dict              = zero_ptr_dict;///Set dictionary Mat pointer to start point
     index_ptr_encoder_input     = zero_ptr_encoder_input;///
     index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
-
+    noise_probablity = (65535 * denoising_percent) / 100;
     if(use_greedy_enc_method == 1)
     {
         for(int i=0; i<Lx_OUT_depth; i++) ///-1 tell that this will not used
@@ -557,8 +604,8 @@ void sparse_autoenc::train_encoder(void)
                 }
                 ///=========== Copy over the input data to encoder_input =========
                 *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
-                *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
-///TODO add denoising on *index_ptr_deno_residual_enc
+                insert_enc_noise(k);
+
                 index_ptr_encoder_input++;
                 index_ptr_deno_residual_enc++;
                 ///=========== End copy over the input data to encoder_input =====
@@ -698,8 +745,7 @@ void sparse_autoenc::train_encoder(void)
                         {
                             ///=========== Copy over the input data to encoder_input =========
                             *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
-                            *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
-///TODO add denoising on *index_ptr_deno_residual_enc
+                            insert_enc_noise(k);
                             index_ptr_encoder_input++;
                             index_ptr_deno_residual_enc++;
                             ///=========== End copy over the input data to encoder_input =====

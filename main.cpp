@@ -12,9 +12,115 @@ using namespace std;
 //using namespace cv;
 #include "sparse_autoenc.hpp"
 #include "CIFAR_test_data.h"
+//#include "GUI_a.hpp"
+
+///************************************************************************
+///*************** (GUI) Graphic User Interface **************************
+///************************************************************************
+int GUI_parameter1_int = 1;
+int GUI_parameter2_int = 1;
+int GUI_parameter3_int = 90;
+int GUI_parameter4_int = 40;
+int GUI_parameter5_int = 10;
+
+int save_push = 0;
+int load_push = 0;
+int autoenc_ON =1;/// 1 = Autoencoder. 0 = Convolution All layer.
+int H_MIN = 0;
+int H_MAX = 1000;
+int layer_MIN = 1;
+int layer_MAX = 10;
+
+const string GUI_WindowName = "GUI_Trackbars";
+
+void callbackButton1(int state, void *)
+{
+    printf("Autoencoder ON/OFF state =%d\n", state);
+    autoenc_ON = state;
+
+}
+void callbackButton2(int state, void *pointer)
+{
+    printf("Save button pressed\n");
+    save_push= 1;
+}
+void callbackButton3(int state, void *pointer)
+{
+    printf("Load button pressed\n");
+
+    load_push= 1;
+}
+void callbackButton4(int state, void *pointer)
+{
+    printf("button4 pressed\n");
+}
+void callbackButton5(int state, void *pointer)
+{
+    printf("button5 pressed\n");
+}
+void callbackButton6(int state, void *pointer)
+{
+    printf("button6 pressed\n");
+}
+void callbackButton7(int state, void *pointer)
+{
+    printf("button7 pressed\n");
+}
+
+float GUI_learning_rate = 0.0f;
+
+void action_GUI( int, void* )
+{
+    GUI_learning_rate = 0.001f * ((float) GUI_parameter2_int);
+    printf("GUI_learning_rate = %f\n", GUI_learning_rate);
+
+    if(GUI_parameter1_int <layer_MIN)
+    {
+        GUI_parameter1_int = layer_MIN;
+    }
+    printf("layer = %d\n", GUI_parameter1_int);
+}
+
+
+void create_GUI(void)
+{
+    cv::namedWindow(GUI_WindowName,0);
+    char GUI_TrackbarName[50];
+    sprintf(GUI_TrackbarName, "Control values");
+    string nameb1 = "Autoencode";
+    string nameb2 = "Save dictionary file";
+    string nameb3 = "Load dictionary file";
+    string nameb4 = "Buttom4";
+    string nameb5 = "Buttom5";
+    string nameb6 = "Buttom6";
+    string nameb7 = "Buttom7";
+
+    //cv::createButton(nameb1,callbackButton1,&button1_data,CV_CHECKBOX,1);
+    cv::createButton(nameb1,callbackButton1,NULL,CV_CHECKBOX,1);
+    cv::createButton(nameb2,callbackButton2,NULL,CV_PUSH_BUTTON,0);
+    cv::createButton(nameb3,callbackButton3,NULL,CV_PUSH_BUTTON,2);
+    cv::createButton(nameb4,callbackButton4,NULL,CV_PUSH_BUTTON,0);
+    cv::createButton(nameb5,callbackButton5,NULL,CV_PUSH_BUTTON,0);
+    cv::createButton(nameb6,callbackButton6,NULL,CV_PUSH_BUTTON,0);
+    cv::createButton(nameb7,callbackButton7,NULL,CV_PUSH_BUTTON,0);
+    cv::createTrackbar("Layer numb", GUI_WindowName, &GUI_parameter1_int, layer_MAX, action_GUI);
+    cv::createTrackbar("learning g ", GUI_WindowName, &GUI_parameter2_int, 1000, action_GUI);
+    cv::createTrackbar("residual g ", GUI_WindowName, &GUI_parameter3_int, 100, action_GUI);
+    cv::createTrackbar("noise perc ", GUI_WindowName, &GUI_parameter4_int, 100, action_GUI);
+    cv::createTrackbar("K_sparse ", GUI_WindowName, &GUI_parameter5_int, 1000, action_GUI);
+
+}
+///************************************************************************
+///************ End of (GUI) **********************************************
+///************************************************************************
+
+
 
 int main()
 {
+  //  GUI_a gui_obj;///
+  //  gui_obj.init();
+    create_GUI();
     CIFAR_test_data CIFAR_object;///Data input images use CIFAR data set
     printf("Need CIFAR input data data_batch_1.bin for test\n");
     CIFAR_object.init_CIFAR();///Read CIFAR data_batch_1.bin file
@@ -25,10 +131,11 @@ int main()
     sparse_autoenc cnn_autoenc_layer2;
     cnn_autoenc_layer2.layer_nr = 2;
 
+    int layer_control;
 
     cnn_autoenc_layer1.show_patch_during_run = 0;///Only for debugging
     cnn_autoenc_layer1.use_greedy_enc_method = 1;///
-    cnn_autoenc_layer1.show_encoder_on_conv_cube = 0;
+    cnn_autoenc_layer1.show_encoder_on_conv_cube = 1;
     cnn_autoenc_layer1.learning_rate = 0.003;
     cnn_autoenc_layer1.momentum = 0.0;
     cnn_autoenc_layer1.residual_gain = 0.9;
@@ -48,8 +155,8 @@ int main()
     cnn_autoenc_layer1.use_dynamic_penalty = 0;
     cnn_autoenc_layer1.penalty_add         = 0.0f;
     cnn_autoenc_layer1.init_noise_gain     = 0.15f;///
-    cnn_autoenc_layer1.enable_denoising    = 0;
-    cnn_autoenc_layer1.denoising_percent   = 50;///0..100
+    cnn_autoenc_layer1.enable_denoising    = 1;
+
     cnn_autoenc_layer1.use_leak_relu = 1;
     cnn_autoenc_layer1.score_bottom_level = -1000.0f;
     cnn_autoenc_layer1.use_variable_leak_relu = 1;
@@ -92,7 +199,7 @@ int main()
     cnn_autoenc_layer2.use_dynamic_penalty = 0;
     cnn_autoenc_layer2.penalty_add      = 0.0f;
     cnn_autoenc_layer2.init_noise_gain = 0.25f;///
-    cnn_autoenc_layer2.enable_denoising = 0;
+    cnn_autoenc_layer2.enable_denoising = 1;
     cnn_autoenc_layer2.denoising_percent = 50;///0..100
     cnn_autoenc_layer2.use_leak_relu = 1;
     cnn_autoenc_layer2.score_bottom_level = -1000.0f;
@@ -102,6 +209,7 @@ int main()
     cnn_autoenc_layer2.init();
     cnn_autoenc_layer2.k_sparse_sanity_check();
     cnn_autoenc_layer2.copy_dictionary2visual_dict();
+
 
 /*
 //ONLY test with noise on L2
@@ -128,12 +236,11 @@ int main()
     //printf("DEBUGG\n");
 
     //    cnn_autoenc_layer2.train_encoder();
-
     cv::waitKey(1);
      while(1)
     {
         CIFAR_object.insert_a_random_CIFAR_image();
-        if(cnn_autoenc_layer1.use_greedy_enc_method = 1)
+        if(cnn_autoenc_layer1.use_greedy_enc_method == 1)
         {
             cnn_autoenc_layer1.use_greedy_enc_method = 0;///
             //cnn_autoenc_layer1.learning_rate = 0.02;
@@ -144,28 +251,77 @@ int main()
             cnn_autoenc_layer1.use_greedy_enc_method = 1;///
            // cnn_autoenc_layer1.learning_rate = 0.02;
         }
+        layer_control = GUI_parameter1_int;
+        switch(layer_control)
+        {
+        case(1):
+            cnn_autoenc_layer1.denoising_percent   = GUI_parameter4_int;///0..100
+            break;
+        case(2):
+            cnn_autoenc_layer2.denoising_percent   = GUI_parameter4_int;///0..100
+            break;
+        }
 
-        cnn_autoenc_layer1.k_sparse_sanity_check();///This should be called every time K_sparse changes
-        cnn_autoenc_layer2.k_sparse_sanity_check();///This should be called every time K_sparse changes
-        cnn_autoenc_layer1.random_change_ReLU_leak_variable();
-        cnn_autoenc_layer1.train_encoder();
-        //cnn_autoenc_layer2.train_encoder();
-        cnn_autoenc_layer1.copy_dictionary2visual_dict();
-        cnn_autoenc_layer2.copy_dictionary2visual_dict();
-        cv::imshow("Visual_dict_L2", cnn_autoenc_layer2.visual_dict);
         cv::imshow("L2_IN_cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
         cv::imshow("L2_OUT_cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
-        cv::imshow("Visual_dict_L1", cnn_autoenc_layer1.visual_dict);
         cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
         cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
-        imshow("L1 rec", cnn_autoenc_layer1.reconstruct);
-        imshow("L1 enc_input", cnn_autoenc_layer1.encoder_input);
-        imshow("L1 enc_error", cnn_autoenc_layer1.enc_error);
-        imshow("L2 rec", cnn_autoenc_layer2.reconstruct);
-        imshow("L2 enc_input", cnn_autoenc_layer2.encoder_input);
-        imshow("L2 enc_error", cnn_autoenc_layer2.enc_error);
-        imshow("L1 bias hid2out", cnn_autoenc_layer1.visual_b_hid2out);
-        imshow("L2 bias hid2out", cnn_autoenc_layer2.visual_b_hid2out);
+        switch(layer_control)
+        {
+        case(1):
+            if(cnn_autoenc_layer1.K_sparse != GUI_parameter5_int)
+            {
+                if(GUI_parameter5_int < 1)
+                {
+                    GUI_parameter5_int = 1;
+                }
+                if(GUI_parameter5_int > cnn_autoenc_layer1.Lx_OUT_depth-1)
+                {
+                    GUI_parameter5_int = cnn_autoenc_layer1.Lx_OUT_depth-1;
+                }
+
+                cnn_autoenc_layer1.K_sparse = GUI_parameter5_int;
+                printf("K_sparse change to = %d\n", cnn_autoenc_layer1.K_sparse);
+                cnn_autoenc_layer1.k_sparse_sanity_check();///This should be called every time K_sparse changes
+            }
+
+            cnn_autoenc_layer1.random_change_ReLU_leak_variable();
+            cnn_autoenc_layer1.copy_dictionary2visual_dict();
+            cnn_autoenc_layer1.train_encoder();
+            imshow("L1 rec", cnn_autoenc_layer1.reconstruct);
+            imshow("L1 enc_input", cnn_autoenc_layer1.encoder_input);
+            imshow("L1 enc_error", cnn_autoenc_layer1.enc_error);
+            imshow("L1 noise resid", cnn_autoenc_layer1.denoised_residual_enc_input);
+            imshow("L1 bias hid2out", cnn_autoenc_layer1.visual_b_hid2out);
+            cv::imshow("Visual_dict_L1", cnn_autoenc_layer1.visual_dict);
+            break;
+        case(2):
+            if(cnn_autoenc_layer2.K_sparse != GUI_parameter5_int)
+            {
+                if(GUI_parameter5_int < 1)
+                {
+                    GUI_parameter5_int = 1;
+                }
+                if(GUI_parameter5_int > cnn_autoenc_layer2.Lx_OUT_depth-1)
+                {
+                    GUI_parameter5_int = cnn_autoenc_layer2.Lx_OUT_depth-1;
+                }
+                cnn_autoenc_layer2.K_sparse = GUI_parameter5_int;
+                printf("K_sparse change to = %d\n", cnn_autoenc_layer2.K_sparse);
+                cnn_autoenc_layer2.k_sparse_sanity_check();///This should be called every time K_sparse changes
+            }
+            cnn_autoenc_layer2.copy_dictionary2visual_dict();
+            cnn_autoenc_layer2.train_encoder();
+            imshow("L2 rec", cnn_autoenc_layer2.reconstruct);
+            imshow("L2 enc_input", cnn_autoenc_layer2.encoder_input);
+            imshow("L2 enc_error", cnn_autoenc_layer2.enc_error);
+            imshow("L2 noise resid", cnn_autoenc_layer2.denoised_residual_enc_input);
+            imshow("L2 bias hid2out", cnn_autoenc_layer2.visual_b_hid2out);
+            cv::imshow("Visual_dict_L2", cnn_autoenc_layer2.visual_dict);
+            break;
+        }
+
+
         cv::waitKey(1);
     }
 
