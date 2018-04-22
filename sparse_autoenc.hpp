@@ -17,7 +17,7 @@ const int MAX_DEPTH = 9999;
 /// ======== Things for evaluation only ==========
 const int ms_patch_show = 1;
 int pause_score_print_ms = 100;
-int ON_OFF_print_score = 1;
+int ON_OFF_print_score = 0;
 int print_variable_relu_leak = 0;
 /// ==============================================
 
@@ -66,6 +66,8 @@ public:
     cv::Mat eval_atom_patch;
     cv::Mat bias_in2hid;///Column 0 = the weight. Column 1 = change weight
     cv::Mat bias_hid2out;
+    cv::Mat visual_b_hid2out;///Same as bias_hid2out but + 0.5 for visualize
+    cv::Mat visual_b_in2hid;///Same as bias_in2hid but + 0.5 for visualize
     float init_noise_gain;
 
     ///Regarding ReLU Leak function
@@ -157,6 +159,7 @@ void sparse_autoenc::lerning_autencoder(void)
     if(color_mode==1)
     {
         reconstruct = cv::Scalar(0.5f, 0.5f, 0.5f);///Start with a neutral (gray) image
+       // reconstruct = cv::Scalar(0.0f, 0.0f, 0.0f);///Start with a neutral (black) image
     }
     else
     {
@@ -436,6 +439,16 @@ void sparse_autoenc::copy_dictionary2visual_dict(void)
         ///Now we could check the sanity of index_ptr_dict pointer address
         check_dictionary_ptr_patch();
     }
+
+    visual_b_in2hid = bias_in2hid + cv::Scalar(0.5f);
+    if(color_mode == 1)
+    {
+        visual_b_hid2out = bias_hid2out + cv::Scalar(0.5f, 0.5f, 0.5f);
+    }
+    else
+    {
+        visual_b_hid2out = bias_hid2out + cv::Scalar(0.5f);
+    }
 }
 void sparse_autoenc::copy_visual_dict2dictionary(void)
 {
@@ -554,7 +567,7 @@ void sparse_autoenc::train_encoder(void)
         for(int h=0; h<K_sparse; h++)///Run through K_sparse time and select by Greedy method and make residual each h turn
         {
             index_ptr_dict          = zero_ptr_dict;///Set dictionary Mat pointer to start point
-            ///COLOR dictionary access
+            ///COLOR or GRAY dictionary access
             for(int i=0; i<Lx_OUT_depth; i++)
             {
                 index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
@@ -570,6 +583,13 @@ void sparse_autoenc::train_encoder(void)
                         dot_product += (*index_ptr_deno_residual_enc) * (*index_ptr_dict);
                         index_ptr_deno_residual_enc++;
                         index_ptr_dict++;
+                        if(show_patch_during_run == 1)///Only for debugging)
+                        {
+                            int eval_ROW = k/(patch_side_size*Lx_IN_data_cube.channels());
+                            int eval_COL = k%(patch_side_size*Lx_IN_data_cube.channels());
+                            eval_indata_patch.at<float>(eval_ROW, eval_COL)   = *index_ptr_Lx_IN_data;
+                            eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
+                        }
                     }
                 }
                 ///and store the result in
@@ -646,35 +666,46 @@ void sparse_autoenc::train_encoder(void)
         if(color_mode == 1)///When color mode there is another data access of the dictionary
         {
 
-            ///COLOR dictionary access
+            ///COLOR or GRAY dictionary access
             for(int i=0; i<Lx_OUT_depth; i++)
             {
                 ///Do the dot product (scalar product) of all the atom's in the dictionary with the input data on Lx_IN_data_cube
                 dot_product = 0.0f;
-                for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
+                for(int j=0; j<Lx_IN_depth; j++)
                 {
-                    index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((patch_row_offset + k/(patch_side_size*dictionary.channels())) * (Lx_IN_widht * Lx_IN_data_cube.channels()) + (k%(patch_side_size*dictionary.channels())) + (patch_col_offset * Lx_IN_data_cube.channels()));
-                    dot_product += (*index_ptr_Lx_IN_data) * (*index_ptr_dict);
-                    if(show_patch_during_run == 1)///Only for debugging)
+
+                    for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
                     {
-                        int eval_ROW = k/(patch_side_size*Lx_IN_data_cube.channels());
-                        int eval_COL = k%(patch_side_size*Lx_IN_data_cube.channels());
-                        eval_indata_patch.at<float>(eval_ROW, eval_COL)   = *index_ptr_Lx_IN_data;
-                        eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
-                    }
-                    index_ptr_dict++;///
-                    ///=========== Copy over the input data to encoder_input =========
-                    if(i==0)///Do this copy input data to encoder_input ones on Lx_OUT_depth 0, not for every Lx_OUT_depth turn
-                    {
+                        if(color_mode == 1)
+                        {
+                            index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((patch_row_offset + k/(patch_side_size*dictionary.channels())) * (Lx_IN_widht * Lx_IN_data_cube.channels()) + (k%(patch_side_size*dictionary.channels())) + (patch_col_offset * Lx_IN_data_cube.channels()));
+                        }
+                        else
+                        {
+                            index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((j * Lx_IN_hight * Lx_IN_widht) + ((patch_row_offset + k/patch_side_size) * Lx_IN_widht) + (k%patch_side_size) + (patch_col_offset));
+                        }
+                        dot_product += (*index_ptr_Lx_IN_data) * (*index_ptr_dict);
+                        index_ptr_dict++;///
+                        if(show_patch_during_run == 1)///Only for debugging)
+                        {
+                            int eval_ROW = k/(patch_side_size*Lx_IN_data_cube.channels());
+                            int eval_COL = k%(patch_side_size*Lx_IN_data_cube.channels());
+                            eval_indata_patch.at<float>(eval_ROW, eval_COL)   = *index_ptr_Lx_IN_data;
+                            eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
+                        }
                         ///=========== Copy over the input data to encoder_input =========
-                        *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
-                        *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+                        if(i==0)///Do this copy input data to encoder_input ones on Lx_OUT_depth 0, not for every Lx_OUT_depth turn
+                        {
+                            ///=========== Copy over the input data to encoder_input =========
+                            *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+                            *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
 ///TODO add denoising on *index_ptr_deno_residual_enc
-                        index_ptr_encoder_input++;
-                        index_ptr_deno_residual_enc++;
+                            index_ptr_encoder_input++;
+                            index_ptr_deno_residual_enc++;
+                            ///=========== End copy over the input data to encoder_input =====
+                        }
                         ///=========== End copy over the input data to encoder_input =====
                     }
-                    ///=========== End copy over the input data to encoder_input =====
                 }
                 dot_product += bias_in2hid.at<float>(i, 0);
 
@@ -691,54 +722,6 @@ void sparse_autoenc::train_encoder(void)
             }
 
         }
-        else
-        {
-            ///GRAY dictionary access
-            for(int i=0; i<Lx_OUT_depth; i++)
-            {
-                ///Do the dot product (scalar product) of all the atom's in the dictionary with the input data on Lx_IN_data_cube
-                dot_product = 0.0f;
-                for(int j=0; j<Lx_IN_depth; j++)
-                {
-                    for(int k=0; k<(patch_side_size*patch_side_size); k++)
-                    {
-                        index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((j * Lx_IN_hight * Lx_IN_widht) + ((patch_row_offset + k/patch_side_size) * Lx_IN_widht) + (k%patch_side_size) + (patch_col_offset));
-                        dot_product += (*index_ptr_Lx_IN_data) * (*index_ptr_dict);
-                        if(show_patch_during_run == 1)///Only for debugging)
-                        {
-                            int eval_ROW = k/(patch_side_size);
-                            int eval_COL = k%(patch_side_size);
-                            eval_indata_patch.at<float>(eval_ROW, eval_COL)   = *index_ptr_Lx_IN_data;
-                            eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
-                        }
-                        index_ptr_dict++;///
-                        ///=========== Copy over the input data to encoder_input =========
-                        if(i==0)///Do this copy input data to encoder_input ones on Lx_OUT_depth 0, not for every Lx_OUT_depth turn
-                        {
-                            ///=========== Copy over the input data to encoder_input =========
-                            *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
-                            *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
-///TODO add denoising on *index_ptr_deno_residual_enc
-                            index_ptr_encoder_input++;
-                            index_ptr_deno_residual_enc++;
-                            ///=========== End copy over the input data to encoder_input =====
-                        }
-                        ///=========== End copy over the input data to encoder_input =====
-                    }
-                    if(show_patch_during_run == 1)///Only for debugging)
-                    {
-                        imshow("patch", eval_indata_patch);
-                        imshow("atom", eval_atom_patch);
-                        cv::waitKey(ms_patch_show);
-                    }
-                }
-                dot_product += bias_in2hid.at<float>(i, 0);
-                ///Put this dot product into train_hidden_node
-                train_hidden_node[i] = dot_product;
-                train_hidden_deleted_max[i] = dot_product;
-            }
-        }
-
 
         encoder_loss = 0.0f;///Clear
         if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
@@ -964,6 +947,7 @@ void sparse_autoenc::init(void)
         Lx_IN_data_cube.create(Lx_IN_hight, Lx_IN_widht, CV_32FC3);
         printf("Lx_IN_data_cube are now created in COLOR mode CV_32FC3\n");
         bias_hid2out.create(patch_side_size, patch_side_size, CV_32FC3);
+        visual_b_hid2out.create(patch_side_size, patch_side_size, CV_32FC3);
         change_w_b_hid2out.create(patch_side_size, patch_side_size, CV_32FC3);
         change_w_b_hid2out = cv::Scalar(0.0f, 0.0f, 0.0f);
         for(int i=0; i<patch_side_size; i++)
@@ -975,6 +959,8 @@ void sparse_autoenc::init(void)
         }
         printf("bias_hid2out are now created in COLOR mode CV_32FC3\n");
         bias_in2hid.create(Lx_OUT_depth, 2, CV_32FC1);///Column 0 = the weight. Column 1 = change weight
+        visual_b_in2hid.create(Lx_OUT_depth, 2, CV_32FC1);///Column 0 = the weight. Column 1 = change weight
+
         for(int i=0; i<Lx_OUT_depth; i++)
         {
             bias_in2hid.at<float>(i, 0) = get_noise();
@@ -1012,6 +998,7 @@ void sparse_autoenc::init(void)
             printf("Lx_IN_data_cube are now created in GRAY mode CV_32FC1\n");
         }
         bias_hid2out.create(patch_side_size  * Lx_IN_depth, patch_side_size, CV_32FC1);
+        visual_b_hid2out.create(patch_side_size, patch_side_size, CV_32FC1);
         change_w_b_hid2out.create(patch_side_size  * Lx_IN_depth, patch_side_size, CV_32FC1);
         change_w_b_hid2out = cv::Scalar(0.0f);
         for(int h=0; h<Lx_IN_depth; h++)
@@ -1026,6 +1013,7 @@ void sparse_autoenc::init(void)
         }
         printf("bias_hid2out are now created in GRAY mode CV_32FC1\n");
         bias_in2hid.create(Lx_OUT_depth, 2, CV_32FC1);///Column 0 = the weight. Column 1 = change weight
+        visual_b_in2hid.create(Lx_OUT_depth, 2, CV_32FC1);///Column 0 = the weight. Column 1 = change weight
         for(int i=0; i<Lx_OUT_depth; i++)
         {
             bias_in2hid.at<float>(i, 0) = get_noise();
