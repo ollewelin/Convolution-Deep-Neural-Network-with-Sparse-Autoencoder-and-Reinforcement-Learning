@@ -250,6 +250,8 @@ int main()
      while(1)
     {
         CIFAR_object.insert_a_random_CIFAR_image();
+        cnn_autoenc_layer1.use_greedy_enc_method = 1;///
+   /*
         if(cnn_autoenc_layer1.use_greedy_enc_method == 1)
         {
             cnn_autoenc_layer1.use_greedy_enc_method = 0;///
@@ -261,6 +263,8 @@ int main()
             cnn_autoenc_layer1.use_greedy_enc_method = 1;///
            // cnn_autoenc_layer1.learning_rate = 0.02;
         }
+    */
+
         layer_control = GUI_parameter1_int;
         switch(layer_control)
         {
