@@ -26,6 +26,9 @@ class sparse_autoenc
 public:
     sparse_autoenc() {}
     virtual ~sparse_autoenc() {}
+    int use_auto_bias_level;
+    float fix_bias_level;
+
     int layer_nr;
     float learning_rate;
     float momentum;
@@ -33,6 +36,7 @@ public:
     void init(void);
     void train_encoder(void);
     int show_patch_during_run;///Only for evaluation/debugging
+    int use_salt_pepper_noise;///Only depend in COLOR mode. 1 = black..white noise. 0 = all kinds of color noise
     int show_encoder_on_conv_cube;///Only for debugging
     void copy_visual_dict2dictionary(void);
     void copy_dictionary2visual_dict(void);
@@ -92,6 +96,7 @@ public:
     int denoising_percent;///Input parameter 0..100
 ///
     int use_greedy_enc_method;///Use Greedy encoder selection of atom's take longer time but better solver. If enabled the cv::Mat denoised_residual_enc_input used
+    int print_greedy_reused_atom;
     float encoder_loss;
     float get_noise(void);
 protected:
@@ -101,7 +106,7 @@ private:
  ///   cv::Mat change_w_b_in2hid;///Change weight's used for update weight's
  ///   change_w_b_in2hid replaced by Column 0 = the weight. Column 1 = change weight on bias_in2hid
     cv::Mat change_w_b_hid2out;///Change weight's used for update weight's
-
+    float bias_node_level;
     int v_dict_hight;
     int v_dict_width;
     int dict_h;
@@ -168,7 +173,7 @@ void sparse_autoenc::lerning_autencoder(void)
     }
 
     ///Add bias signal to reconstruction
-    reconstruct += bias_hid2out;
+    reconstruct += bias_hid2out * bias_node_level;
 
 
     for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's and do ReLU non linear activation function of hidden nodes
@@ -252,7 +257,7 @@ void sparse_autoenc::lerning_autencoder(void)
             encoder_loss += (*index_ptr_enc_error) * (*index_ptr_enc_error);///Loss = error²
             ///change_weight = learning_rate * node * delta_out + momentum * change_weight
             ///weight       += change_weight
-            (*index_ptr_chan_w_b_hid2out) = learning_rate * (*index_ptr_enc_error) + momentum * (*index_ptr_chan_w_b_hid2out);
+            (*index_ptr_chan_w_b_hid2out) = learning_rate * bias_node_level * (*index_ptr_enc_error) + momentum * (*index_ptr_chan_w_b_hid2out);
             (*index_ptr_bias_hid2out)    += (*index_ptr_chan_w_b_hid2out);
 
             index_ptr_bias_hid2out++;
@@ -322,12 +327,12 @@ void sparse_autoenc::lerning_autencoder(void)
 
         if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
         {
-            bias_in2hid.at<float>((score_table[i]), 1)  = learning_rate * temp_hidden_delta + momentum * bias_in2hid.at<float>((score_table[i]), 1);///Column 1 is the change weight data
+            bias_in2hid.at<float>((score_table[i]), 1)  = learning_rate * bias_node_level * temp_hidden_delta + momentum * bias_in2hid.at<float>((score_table[i]), 1);///Column 1 is the change weight data
             bias_in2hid.at<float>((score_table[i]), 0) += bias_in2hid.at<float>((score_table[i]), 1);///Column 0 is the weight data. Column 1 is the change weigh
         }
         else
         {
-            bias_in2hid.at<float>(i, 1)  = learning_rate * temp_hidden_delta + momentum * bias_in2hid.at<float>(i, 1);///Column 1 is the change weight data
+            bias_in2hid.at<float>(i, 1)  = learning_rate * bias_node_level * temp_hidden_delta + momentum * bias_in2hid.at<float>(i, 1);///Column 1 is the change weight data
             bias_in2hid.at<float>(i, 0) += bias_in2hid.at<float>(i, 1);///Column 0 is the weight data. Column 1 is the change weight data
         }
      }
@@ -531,7 +536,7 @@ inline void sparse_autoenc::insert_enc_noise(int k)
     static float salt_pepper_noise = 0.0f;
     if(enable_denoising == 1)
     {
-        if(dictionary.channels() == 3)///Color mode
+        if(dictionary.channels() == 3 && use_salt_pepper_noise == 1)///Color mode
         {
             if((k%3) == 0)
             {
@@ -573,6 +578,14 @@ inline void sparse_autoenc::insert_enc_noise(int k)
 
 void sparse_autoenc::train_encoder(void)
 {
+    if(use_auto_bias_level == 1)
+    {
+        bias_node_level =  ((float) K_sparse) / ((float) Lx_OUT_depth);
+    }
+    else
+    {
+        bias_node_level = fix_bias_level;
+    }
     float dot_product = 0.0f;
     int patch_row_offset=0;///This will point where the start upper row of the part of input data how will be dot product with the patch atom
     int patch_col_offset=0;///This will point where the start left column of the part of input data how will be dot product with the patch
@@ -640,8 +653,9 @@ void sparse_autoenc::train_encoder(void)
                     }
                 }
                 ///and store the result in
-                dot_product += bias_in2hid.at<float>(i, 0);
-                temp_hidden_node[i] = dot_product;
+                dot_product += bias_in2hid.at<float>(i, 0) * bias_node_level;
+                //temp_hidden_node[i] = ReLU_function(dot_product);
+                temp_hidden_node[i] = (dot_product);
             }///i<Lx_OUT_depth loop end
             ///Do the score table
             ///Make the score table, select out by score on order the K_sparse strongest atom's of the dictionary
@@ -657,6 +671,23 @@ void sparse_autoenc::train_encoder(void)
                     strongest_atom_nr = j;
                 }
             }
+
+            int skip = 0;
+            if(print_greedy_reused_atom == 1)
+            {
+                for(int j=0; j<h; j++)
+                {
+                            if(strongest_atom_nr == (score_table[j]))
+                            {
+                                skip = 1;
+                                printf("Skip j = %d\n", j);
+                            }
+
+
+                }
+            }
+
+
             if(strongest_atom_nr == -1)
             {
                 score_table[h] = -1;///No atom's was stronger then score_bottom_level.
@@ -753,7 +784,7 @@ void sparse_autoenc::train_encoder(void)
                         ///=========== End copy over the input data to encoder_input =====
                     }
                 }
-                dot_product += bias_in2hid.at<float>(i, 0);
+                dot_product += bias_in2hid.at<float>(i, 0) * bias_node_level;
 
                 if(show_patch_during_run == 1)///Only for debugging)
                 {
@@ -762,8 +793,9 @@ void sparse_autoenc::train_encoder(void)
                     cv::waitKey(ms_patch_show);
                 }
                 ///Put this dot product into train_hidden_node
+                //train_hidden_node[i] = ReLU_function(dot_product);
                 train_hidden_node[i] = dot_product;
-                train_hidden_deleted_max[i] = dot_product;
+                train_hidden_deleted_max[i] = train_hidden_node[i];
 
             }
 

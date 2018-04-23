@@ -17,12 +17,12 @@ using namespace std;
 ///************************************************************************
 ///*************** (GUI) Graphic User Interface **************************
 ///************************************************************************
-int GUI_parameter1_int = 1;
-int GUI_parameter2_int = 1;
-int GUI_parameter3_int = 90;
+int GUI_parameter1_int = 1;///layer_nr
+int GUI_parameter2_int = 50;///learning_gain
+int GUI_parameter3_int = 100;
 int GUI_parameter4_int = 40;
 int GUI_parameter5_int = 10;
-
+int GUI_parameter6_int = 10;
 int save_push = 0;
 int load_push = 0;
 int autoenc_ON =1;/// 1 = Autoencoder. 0 = Convolution All layer.
@@ -42,13 +42,13 @@ void callbackButton1(int state, void *)
 void callbackButton2(int state, void *pointer)
 {
     printf("Save button pressed\n");
-    save_push= 1;
+    save_push = 1;
 }
 void callbackButton3(int state, void *pointer)
 {
     printf("Load button pressed\n");
 
-    load_push= 1;
+    load_push = 1;
 }
 void callbackButton4(int state, void *pointer)
 {
@@ -108,6 +108,8 @@ void create_GUI(void)
     cv::createTrackbar("residual g ", GUI_WindowName, &GUI_parameter3_int, 100, action_GUI);
     cv::createTrackbar("noise perc ", GUI_WindowName, &GUI_parameter4_int, 100, action_GUI);
     cv::createTrackbar("K_sparse ", GUI_WindowName, &GUI_parameter5_int, 1000, action_GUI);
+    cv::createTrackbar("Bias_level ", GUI_WindowName, &GUI_parameter6_int, 100, action_GUI);
+
 
 }
 ///************************************************************************
@@ -134,8 +136,13 @@ int main()
     int layer_control;
 
     cnn_autoenc_layer1.show_patch_during_run = 0;///Only for debugging
+    cnn_autoenc_layer1.use_auto_bias_level = 0;
+    cnn_autoenc_layer1.fix_bias_level = 0.01f;
+
     cnn_autoenc_layer1.use_greedy_enc_method = 1;///
+    cnn_autoenc_layer1.print_greedy_reused_atom = 0;
     cnn_autoenc_layer1.show_encoder_on_conv_cube = 1;
+    cnn_autoenc_layer1.use_salt_pepper_noise = 1;///Only depend in COLOR mode. 1 = black..white noise. 0 = all kinds of color noise
     cnn_autoenc_layer1.learning_rate = 0.003;
     cnn_autoenc_layer1.momentum = 0.0;
     cnn_autoenc_layer1.residual_gain = 0.9;
@@ -151,7 +158,7 @@ int main()
     cnn_autoenc_layer1.Lx_IN_widht         = CIFAR_object.CIFAR_width;///Convolution cube width of data
     cnn_autoenc_layer1.e_stop_threshold    = 30.0f;
     //cnn_autoenc_layer1.K_sparse            = cnn_autoenc_layer1.Lx_OUT_depth / 15;
-    cnn_autoenc_layer1.K_sparse            = 25;
+    cnn_autoenc_layer1.K_sparse            = 60;
     cnn_autoenc_layer1.use_dynamic_penalty = 0;
     cnn_autoenc_layer1.penalty_add         = 0.0f;
     cnn_autoenc_layer1.init_noise_gain     = 0.15f;///
@@ -177,6 +184,7 @@ int main()
 
     cnn_autoenc_layer2.show_patch_during_run = 0;///Only for debugging
     cnn_autoenc_layer2.use_greedy_enc_method = 0;///
+    cnn_autoenc_layer2.print_greedy_reused_atom = 1;
     cnn_autoenc_layer2.learning_rate = 0.01;
     cnn_autoenc_layer2.momentum = 0.0;
     cnn_autoenc_layer2.residual_gain = 0.1;
@@ -185,6 +193,8 @@ int main()
     cnn_autoenc_layer2.init_in_from_outside       = 1;///When init_in_from_outside = 1 then Lx_IN_data_cube is same poiner as the Lx_OUT_convolution_cube of the previous layer
   //  cnn_autoenc_layer2.init_in_from_outside       = 0;
     cnn_autoenc_layer2.color_mode      = 0;///color_mode = 1 is ONLY allowed to use at Layer 1
+    cnn_autoenc_layer2.use_salt_pepper_noise = 0;///Only depend in COLOR mode. 1 = black..white noise. 0 = all kinds of color noise
+
     cnn_autoenc_layer2.patch_side_size  = 7;
     cnn_autoenc_layer2.Lx_IN_depth      = cnn_autoenc_layer1.Lx_OUT_depth;///This is forced inside class to 1 when color_mode = 1. In gray mode = color_mode = 0 this number is the size of the input data depth.
                                             ///So if for example the input data come a convolution cube the Lx_IN_depth is the number of the depth of this convolution cube source/input data
@@ -255,9 +265,39 @@ int main()
         switch(layer_control)
         {
         case(1):
+            if(save_push==1)
+            {
+                cv::imwrite("L1_dict.bin", cnn_autoenc_layer1.dictionary);
+                cv::imwrite("L1_bias_in2hid.bin", cnn_autoenc_layer1.bias_in2hid);
+                cv::imwrite("L1_bias_hid2out.bin", cnn_autoenc_layer1.bias_hid2out);
+                save_push=0;
+            }
+            if(load_push==1)
+            {
+                cnn_autoenc_layer1.dictionary = cv::imread("L1_dict.bin", 1);
+                cnn_autoenc_layer1.bias_in2hid = cv::imread("L1_bias_in2hid.bin", 1);
+                cnn_autoenc_layer1.bias_hid2out = cv::imread("L1_bias_hid2out.bin", 1);
+                load_push=0;
+            }
+
             cnn_autoenc_layer1.denoising_percent   = GUI_parameter4_int;///0..100
             break;
         case(2):
+            if(save_push==1)
+            {
+                cv::imwrite("L2_dict.bin", cnn_autoenc_layer2.dictionary);
+                cv::imwrite("L2_bias_in2hid.bin", cnn_autoenc_layer2.bias_in2hid);
+                cv::imwrite("L2_bias_hid2out.bin", cnn_autoenc_layer2.bias_hid2out);
+                save_push=0;
+            }
+            if(load_push==1)
+            {
+                cnn_autoenc_layer2.dictionary = cv::imread("L2_dict.bin", 1);
+                cnn_autoenc_layer2.bias_in2hid = cv::imread("L2_bias_in2hid.bin", 1);
+                cnn_autoenc_layer2.bias_hid2out = cv::imread("L12_bias_hid2out.bin", 1);
+                load_push=0;
+            }
+
             cnn_autoenc_layer2.denoising_percent   = GUI_parameter4_int;///0..100
             break;
         }
@@ -284,7 +324,9 @@ int main()
                 printf("K_sparse change to = %d\n", cnn_autoenc_layer1.K_sparse);
                 cnn_autoenc_layer1.k_sparse_sanity_check();///This should be called every time K_sparse changes
             }
-
+            cnn_autoenc_layer1.learning_rate = ((float) GUI_parameter2_int) * 0.001f;
+            cnn_autoenc_layer1.residual_gain = ((float) GUI_parameter3_int) * 0.01f;
+            cnn_autoenc_layer1.fix_bias_level = ((float) GUI_parameter6_int) * 0.01f;
             cnn_autoenc_layer1.random_change_ReLU_leak_variable();
             cnn_autoenc_layer1.copy_dictionary2visual_dict();
             cnn_autoenc_layer1.train_encoder();
@@ -310,6 +352,8 @@ int main()
                 printf("K_sparse change to = %d\n", cnn_autoenc_layer2.K_sparse);
                 cnn_autoenc_layer2.k_sparse_sanity_check();///This should be called every time K_sparse changes
             }
+            cnn_autoenc_layer2.learning_rate = ((float) GUI_parameter2_int) * 0.001f;
+            cnn_autoenc_layer2.residual_gain = ((float) GUI_parameter3_int) * 0.01f;
             cnn_autoenc_layer2.copy_dictionary2visual_dict();
             cnn_autoenc_layer2.train_encoder();
             imshow("L2 rec", cnn_autoenc_layer2.reconstruct);
