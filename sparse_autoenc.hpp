@@ -174,8 +174,21 @@ void sparse_autoenc::lerning_autencoder(void)
 
     ///Add bias signal to reconstruction
     reconstruct += bias_hid2out * bias_node_level;
-
-
+//    reconstruct += bias_hid2out;
+/*
+    index_ptr_bias_hid2out = zero_ptr_bias_hid2out;
+    index_ptr_reconstruct = zero_ptr_reconstruct;
+    for(int j=0; j<Lx_IN_depth; j++)
+    {
+        for(int k=0; k<patch_side_size*patch_side_size*reconstruct.channels(); k++)
+        {
+            *index_ptr_reconstruct += (*index_ptr_bias_hid2out) * bias_node_level;
+            index_ptr_reconstruct++;
+            index_ptr_bias_hid2out++;
+        }
+    }
+*/
+//printf("bias_node_level %f\n", bias_node_level);
     for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's and do ReLU non linear activation function of hidden nodes
     {
         int at_node = 0;
@@ -654,8 +667,8 @@ void sparse_autoenc::train_encoder(void)
                 }
                 ///and store the result in
                 dot_product += bias_in2hid.at<float>(i, 0) * bias_node_level;
-                //temp_hidden_node[i] = ReLU_function(dot_product);
-                temp_hidden_node[i] = (dot_product);
+                temp_hidden_node[i] = ReLU_function(dot_product);
+                //temp_hidden_node[i] = (dot_product);
             }///i<Lx_OUT_depth loop end
             ///Do the score table
             ///Make the score table, select out by score on order the K_sparse strongest atom's of the dictionary
@@ -793,8 +806,8 @@ void sparse_autoenc::train_encoder(void)
                     cv::waitKey(ms_patch_show);
                 }
                 ///Put this dot product into train_hidden_node
-                //train_hidden_node[i] = ReLU_function(dot_product);
-                train_hidden_node[i] = dot_product;
+                train_hidden_node[i] = ReLU_function(dot_product);
+                //train_hidden_node[i] = dot_product;
                 train_hidden_deleted_max[i] = train_hidden_node[i];
 
             }

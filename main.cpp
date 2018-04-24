@@ -18,11 +18,11 @@ using namespace std;
 ///*************** (GUI) Graphic User Interface **************************
 ///************************************************************************
 int GUI_parameter1_int = 1;///layer_nr
-int GUI_parameter2_int = 50;///learning_gain
+int GUI_parameter2_int = 10;///learning_gain
 int GUI_parameter3_int = 100;
 int GUI_parameter4_int = 40;
 int GUI_parameter5_int = 10;
-int GUI_parameter6_int = 10;
+int GUI_parameter6_int = 100;
 int save_push = 0;
 int load_push = 0;
 int autoenc_ON =1;/// 1 = Autoencoder. 0 = Convolution All layer.
@@ -139,7 +139,7 @@ int main()
     cnn_autoenc_layer1.use_auto_bias_level = 0;
     cnn_autoenc_layer1.fix_bias_level = 0.01f;
 
-    cnn_autoenc_layer1.use_greedy_enc_method = 1;///
+    cnn_autoenc_layer1.use_greedy_enc_method = 0;///
     cnn_autoenc_layer1.print_greedy_reused_atom = 0;
     cnn_autoenc_layer1.show_encoder_on_conv_cube = 1;
     cnn_autoenc_layer1.use_salt_pepper_noise = 1;///Only depend in COLOR mode. 1 = black..white noise. 0 = all kinds of color noise
@@ -250,8 +250,8 @@ int main()
      while(1)
     {
         CIFAR_object.insert_a_random_CIFAR_image();
-        cnn_autoenc_layer1.use_greedy_enc_method = 1;///
-   /*
+     //   cnn_autoenc_layer1.use_greedy_enc_method = 0;///
+/*
         if(cnn_autoenc_layer1.use_greedy_enc_method == 1)
         {
             cnn_autoenc_layer1.use_greedy_enc_method = 0;///
@@ -260,10 +260,10 @@ int main()
         }
         else
         {
-            cnn_autoenc_layer1.use_greedy_enc_method = 1;///
+            cnn_autoenc_layer1.use_greedy_enc_method = 0;///
            // cnn_autoenc_layer1.learning_rate = 0.02;
         }
-    */
+*/
 
         layer_control = GUI_parameter1_int;
         switch(layer_control)
@@ -370,7 +370,9 @@ int main()
         }
 
 
-        cv::waitKey(1);
+     //   cv::waitKey(1);
+     //  imshow("L1 rec", cnn_autoenc_layer1.reconstruct);
+cv::waitKey(1);
     }
 
     return 0;
