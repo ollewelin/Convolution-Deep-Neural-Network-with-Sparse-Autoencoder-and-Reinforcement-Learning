@@ -16,8 +16,6 @@ const int MAX_DEPTH = 9999;
 
 /// ======== Things for evaluation only ==========
 const int ms_patch_show = 1;
-int pause_score_print_ms = 100;
-int ON_OFF_print_score = 0;
 int print_variable_relu_leak = 0;
 /// ==============================================
 
@@ -28,7 +26,8 @@ public:
     virtual ~sparse_autoenc() {}
     int use_auto_bias_level;
     float fix_bias_level;
-
+    int pause_score_print_ms;
+    int ON_OFF_print_score;
     int layer_nr;
     float learning_rate;
     float momentum;
@@ -545,6 +544,7 @@ inline void sparse_autoenc::print_score_table_f(void)
 }
 inline void sparse_autoenc::insert_enc_noise(int k)
 {
+    float input_offset = -0.5f;
     static int chose_nois_dice = 0;
     static float salt_pepper_noise = 0.0f;
     if(enable_denoising == 1)
@@ -564,7 +564,7 @@ inline void sparse_autoenc::insert_enc_noise(int k)
             }
             else
             {
-                *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+                *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data + input_offset;///This is for prepare for the autoencoder
             }
 
         }
@@ -578,14 +578,14 @@ inline void sparse_autoenc::insert_enc_noise(int k)
             }
             else
             {
-                *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+                *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data + input_offset;///This is for prepare for the autoencoder
             }
 
         }
     }
     else
     {
-        *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+        *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data + input_offset;///This is for prepare for the autoencoder
     }
 }
 
@@ -631,12 +631,23 @@ void sparse_autoenc::train_encoder(void)
                 ///=========== Copy over the input data to encoder_input =========
                 *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
                 insert_enc_noise(k);
-
                 index_ptr_encoder_input++;
                 index_ptr_deno_residual_enc++;
                 ///=========== End copy over the input data to encoder_input =====
             }
         }
+        /*
+                index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
+                for(int j=0; j<Lx_IN_depth; j++)
+                {
+
+                    for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
+                    {
+                        (*index_ptr_deno_residual_enc) -= 0.5f;
+                        index_ptr_deno_residual_enc++;
+                    }
+                }
+        */
         for(int h=0; h<K_sparse; h++)///Run through K_sparse time and select by Greedy method and make residual each h turn
         {
             index_ptr_dict          = zero_ptr_dict;///Set dictionary Mat pointer to start point
@@ -797,6 +808,18 @@ void sparse_autoenc::train_encoder(void)
                         ///=========== End copy over the input data to encoder_input =====
                     }
                 }
+                /*
+                index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
+                for(int j=0; j<Lx_IN_depth; j++)
+                {
+
+                    for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
+                    {
+                        (*index_ptr_deno_residual_enc) -= 0.5f;
+                        index_ptr_deno_residual_enc++;
+                    }
+                }
+                */
                 dot_product += bias_in2hid.at<float>(i, 0) * bias_node_level;
 
                 if(show_patch_during_run == 1)///Only for debugging)
