@@ -308,7 +308,7 @@ int main()
                 cnn_autoenc_layer1.bias_hid2out = cv::imread("L1_bias_hid2out.bin", 1);
                 load_push=0;
             }
-
+            cnn_autoenc_layer1.denoising_percent   = GUI_parameter4_int;///0..100
             cnn_autoenc_layer1.pause_score_print_ms   = print_pause_ms;///0..100
             cnn_autoenc_layer1.ON_OFF_print_score = print_score;
             break;
