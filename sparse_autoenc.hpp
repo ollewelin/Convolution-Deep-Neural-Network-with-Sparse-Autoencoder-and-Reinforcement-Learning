@@ -754,6 +754,13 @@ void sparse_autoenc::train_encoder(void)
             {
                 train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
             }
+            else
+            {
+                if(h==K_sparse-1)
+                {
+                    h--;///Rerun the last score_table[h] because it was refinden also as strongest
+                }
+            }
         }///h<K_sparse loop end
         /// ======= Only for evaluation =========
         print_score_table_f();
