@@ -18,15 +18,17 @@ using namespace std;
 ///*************** (GUI) Graphic User Interface **************************
 ///************************************************************************
 int GUI_parameter1_int = 1;///layer_nr
-int GUI_parameter2_int = 2;///learning_gain
+int GUI_parameter2_int = 10;///learning_gain
 int GUI_parameter3_int = 100;
-int GUI_parameter4_int = 40;
-int GUI_parameter5_int = 7;
+int GUI_parameter4_int = 0;///Nois
+int GUI_parameter5_int = 10;
 int GUI_parameter6_int = 100;
 int GUI_parameter7_int = 3000;
+int GUI_parameter8_int = 7;
 int save_push = 0;
 int load_push = 0;
 int print_score = 0;
+int greedy_mode = 0;
 int print_pause_ms = 1;
 int autoenc_ON =1;/// 1 = Autoencoder. 0 = Convolution All layer.
 int H_MIN = 0;
@@ -61,7 +63,8 @@ void callbackButton4(int state, void *)
 }
 void callbackButton5(int state, void *pointer)
 {
-    printf("button5 pressed\n");
+    printf("Greedy mode ON/OFF state =%d\n", state);
+    greedy_mode = state;
 }
 void callbackButton6(int state, void *pointer)
 {
@@ -105,7 +108,7 @@ void create_GUI(void)
     string nameb2 = "Save dictionary file";
     string nameb3 = "Load dictionary file";
     string nameb4 = "print";
-    string nameb5 = "Buttom5";
+    string nameb5 = "Greedy";
     string nameb6 = "Buttom6";
     string nameb7 = "Buttom7";
 
@@ -113,8 +116,8 @@ void create_GUI(void)
     cv::createButton(nameb1,callbackButton1,NULL,CV_CHECKBOX,1);
     cv::createButton(nameb2,callbackButton2,NULL,CV_PUSH_BUTTON,0);
     cv::createButton(nameb3,callbackButton3,NULL,CV_PUSH_BUTTON,2);
-    cv::createButton(nameb4,callbackButton4,NULL,CV_CHECKBOX,0);
-    cv::createButton(nameb5,callbackButton5,NULL,CV_PUSH_BUTTON,0);
+    cv::createButton(nameb4,callbackButton4,NULL,CV_CHECKBOX,0);///Print
+    cv::createButton(nameb5,callbackButton5,NULL,CV_CHECKBOX,1);///Greedy
     cv::createButton(nameb6,callbackButton6,NULL,CV_PUSH_BUTTON,0);
     cv::createButton(nameb7,callbackButton7,NULL,CV_PUSH_BUTTON,0);
     cv::createTrackbar("Layer numb", GUI_WindowName, &GUI_parameter1_int, layer_MAX, action_GUI);
@@ -124,6 +127,7 @@ void create_GUI(void)
     cv::createTrackbar("K_sparse ", GUI_WindowName, &GUI_parameter5_int, 1000, action_GUI);
     cv::createTrackbar("Bias_level ", GUI_WindowName, &GUI_parameter6_int, 100, action_GUI);
     cv::createTrackbar("ms pause ", GUI_WindowName, &GUI_parameter7_int, 10000, action_GUI);
+    cv::createTrackbar("Max node ", GUI_WindowName, &GUI_parameter8_int, 500, action_GUI);
 
 
 }
@@ -164,7 +168,7 @@ int main()
     cnn_autoenc_layer1.use_auto_bias_level = 0;
     cnn_autoenc_layer1.fix_bias_level = 0.01f;
 
-    cnn_autoenc_layer1.use_greedy_enc_method = 0;///
+    cnn_autoenc_layer1.use_greedy_enc_method = greedy_mode;///
     cnn_autoenc_layer1.print_greedy_reused_atom = 0;
     cnn_autoenc_layer1.show_encoder_on_conv_cube = 1;
     cnn_autoenc_layer1.use_salt_pepper_noise = 1;///Only depend in COLOR mode. 1 = black..white noise. 0 = all kinds of color noise
@@ -208,7 +212,7 @@ int main()
    /// cv::imshow("L1 OUT cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
 
     cnn_autoenc_layer2.show_patch_during_run = 0;///Only for debugging
-    cnn_autoenc_layer2.use_greedy_enc_method = 0;///
+    cnn_autoenc_layer2.use_greedy_enc_method = greedy_mode;///
     cnn_autoenc_layer2.print_greedy_reused_atom = 1;
     cnn_autoenc_layer2.learning_rate = 0.01;
     cnn_autoenc_layer2.momentum = 0.0;
@@ -275,7 +279,7 @@ int main()
      while(1)
     {
         CIFAR_object.insert_a_random_CIFAR_image();
-        cnn_autoenc_layer1.use_greedy_enc_method = 1;///
+        cnn_autoenc_layer1.use_greedy_enc_method = greedy_mode;///
 /*
         if(cnn_autoenc_layer1.use_greedy_enc_method == 1)
         {
@@ -311,6 +315,7 @@ int main()
             cnn_autoenc_layer1.denoising_percent   = GUI_parameter4_int;///0..100
             cnn_autoenc_layer1.pause_score_print_ms   = print_pause_ms;///0..100
             cnn_autoenc_layer1.ON_OFF_print_score = print_score;
+            cnn_autoenc_layer1.max_ReLU_auto_reset = (float) GUI_parameter8_int;
             break;
         case(2):
             if(save_push==1)

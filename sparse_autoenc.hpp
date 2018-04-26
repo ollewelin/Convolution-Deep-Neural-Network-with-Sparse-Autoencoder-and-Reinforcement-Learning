@@ -13,7 +13,7 @@
 #include <iostream>
 using namespace std;
 const int MAX_DEPTH = 9999;
-
+//#define ALWAYS_PRINT_RELU_MAX
 /// ======== Things for evaluation only ==========
 const int ms_patch_show = 1;
 int print_variable_relu_leak = 0;
@@ -32,6 +32,7 @@ public:
     float learning_rate;
     float momentum;
     float residual_gain;
+    float max_ReLU_auto_reset;
     void init(void);
     void train_encoder(void);
     int show_patch_during_run;///Only for evaluation/debugging
@@ -363,6 +364,7 @@ inline float sparse_autoenc::check_remove_Nan(float f_input)
 inline float sparse_autoenc::ReLU_function(float input_value)
 {
     float ReLU_result = 0.0f;
+    float temp_random = 0.0f;
     if(input_value < 0.0f)
     {
         if(use_leak_relu == 1)
@@ -388,6 +390,20 @@ inline float sparse_autoenc::ReLU_function(float input_value)
     else
     {
         ReLU_result = input_value;
+    }
+
+    if(ReLU_result > max_ReLU_auto_reset)
+    {
+        temp_random = (float) (rand() % 65535) / 65536;///0..1.0 range
+        ReLU_result = temp_random * max_ReLU_auto_reset * 0.1f;
+        if(ON_OFF_print_score == 1)
+        {
+            printf("reach Max ReLU set to %f\n", ReLU_result);
+        }
+#ifdef ALWAYS_PRINT_RELU_MAX
+printf("reach Max ReLU set to %f\n", ReLU_result);
+#endif // ALWAYS_PRINT_RELU_MAX
+
     }
     return ReLU_result;
 }
@@ -611,6 +627,7 @@ void sparse_autoenc::train_encoder(void)
     noise_probablity = (65535 * denoising_percent) / 100;
     if(use_greedy_enc_method == 1)
     {
+
         for(int i=0; i<Lx_OUT_depth; i++) ///-1 tell that this will not used
         {
             score_table[i] = -1;///Clear the table
@@ -648,8 +665,15 @@ void sparse_autoenc::train_encoder(void)
                     }
                 }
         */
+        int node_already_selected_befor = 0;
+        int search_turn = 0;
         for(int h=0; h<K_sparse; h++)///Run through K_sparse time and select by Greedy method and make residual each h turn
         {
+            search_turn++;
+            if(node_already_selected_befor == 1)
+            {
+                h--;///search strongest again on this score table place
+            }
             index_ptr_dict          = zero_ptr_dict;///Set dictionary Mat pointer to start point
             ///COLOR or GRAY dictionary access
             for(int i=0; i<Lx_OUT_depth; i++)
@@ -696,21 +720,18 @@ void sparse_autoenc::train_encoder(void)
                 }
             }
 
-            int skip = 0;
-            if(print_greedy_reused_atom == 1)
+            node_already_selected_befor = 0;
+            for(int i=0;i<K_sparse;i++)
             {
-                for(int j=0; j<h; j++)
+                if(score_table[i] == strongest_atom_nr)
                 {
-                            if(strongest_atom_nr == (score_table[j]))
-                            {
-                                skip = 1;
-                                printf("Skip j = %d\n", j);
-                            }
-
-
+                    node_already_selected_befor = 1;
+                    if(ON_OFF_print_score == 1)
+                    {
+                        printf("Rerun search_turn = %d\n", search_turn);
+                    }
                 }
             }
-
 
             if(strongest_atom_nr == -1)
             {
@@ -733,7 +754,6 @@ void sparse_autoenc::train_encoder(void)
 
             index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
             ///Update residual data regarding the last selected atom's
-
             for(int i=0; i<Lx_IN_depth; i++)
             {
                 for(int j=0; j<(patch_side_size*patch_side_size*dictionary.channels()); j++)
@@ -743,7 +763,10 @@ void sparse_autoenc::train_encoder(void)
                     index_ptr_dict++;
                 }
             }
-            train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
+            if(node_already_selected_befor == 0)
+            {
+                train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
+            }
         }///h<K_sparse loop end
         /// ======= Only for evaluation =========
         print_score_table_f();
