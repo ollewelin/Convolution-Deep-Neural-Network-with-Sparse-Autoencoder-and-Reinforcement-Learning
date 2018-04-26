@@ -244,8 +244,6 @@ void sparse_autoenc::lerning_autencoder(void)
     ///============================================================
     enc_error = encoder_input - reconstruct;       ///Calculate pixel error. encoder_input - reconstruction
 
- //   imshow("enc_error", enc_error);
- //   cv::waitKey(100);
     ///============================================================
     ///Step 2. complete
     ///============================================================
@@ -653,18 +651,7 @@ void sparse_autoenc::train_encoder(void)
                 ///=========== End copy over the input data to encoder_input =====
             }
         }
-        /*
-                index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
-                for(int j=0; j<Lx_IN_depth; j++)
-                {
 
-                    for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
-                    {
-                        (*index_ptr_deno_residual_enc) -= 0.5f;
-                        index_ptr_deno_residual_enc++;
-                    }
-                }
-        */
         int node_already_selected_befor = 0;
         int search_turn = 0;
         for(int h=0; h<K_sparse; h++)///Run through K_sparse time and select by Greedy method and make residual each h turn
@@ -728,7 +715,7 @@ void sparse_autoenc::train_encoder(void)
                     node_already_selected_befor = 1;
                     if(ON_OFF_print_score == 1)
                     {
-                        printf("Rerun search_turn = %d\n", search_turn);
+                        printf("Rerun atom %d was already find before. search_turn %d\n", strongest_atom_nr, search_turn);
                     }
                 }
             }
