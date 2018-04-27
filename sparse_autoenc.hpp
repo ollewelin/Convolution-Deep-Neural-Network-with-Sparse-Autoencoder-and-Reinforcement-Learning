@@ -13,7 +13,8 @@
 #include <iostream>
 using namespace std;
 const int MAX_DEPTH = 9999;
-//#define ALWAYS_PRINT_RELU_MAX
+#define ALWAYS_PRINT_RELU_MAX
+#define USE_RAND_RESET_MAX_NODE
 /// ======== Things for evaluation only ==========
 const int ms_patch_show = 1;
 int print_variable_relu_leak = 0;
@@ -392,8 +393,12 @@ inline float sparse_autoenc::ReLU_function(float input_value)
 
     if(ReLU_result > max_ReLU_auto_reset)
     {
+#ifdef USE_RAND_RESET_MAX_NODE
         temp_random = (float) (rand() % 65535) / 65536;///0..1.0 range
-        ReLU_result = temp_random * max_ReLU_auto_reset * 0.1f;
+        ReLU_result = temp_random * max_ReLU_auto_reset * 1.0f;
+#else
+        ReLU_result = max_ReLU_auto_reset * 0.95f;
+#endif // USE_RAND_RESET_MAX_NODE
         if(ON_OFF_print_score == 1)
         {
             printf("reach Max ReLU set to %f\n", ReLU_result);
@@ -656,6 +661,11 @@ void sparse_autoenc::train_encoder(void)
         int search_turn = 0;
         for(int h=0; h<K_sparse; h++)///Run through K_sparse time and select by Greedy method and make residual each h turn
         {
+            if(search_turn > (10*K_sparse))
+            {
+                printf("Break search turn reach max search = %d\n", search_turn);
+                break;
+            }
             search_turn++;
             if(node_already_selected_befor == 1)
             {

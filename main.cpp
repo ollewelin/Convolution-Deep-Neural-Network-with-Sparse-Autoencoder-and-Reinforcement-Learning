@@ -19,7 +19,7 @@ using namespace std;
 ///************************************************************************
 int GUI_parameter1_int = 1;///layer_nr
 int GUI_parameter2_int = 10;///learning_gain
-int GUI_parameter3_int = 100;
+int GUI_parameter3_int = 75;
 int GUI_parameter4_int = 0;///Nois
 int GUI_parameter5_int = 10;
 int GUI_parameter6_int = 100;
@@ -315,7 +315,14 @@ int main()
             cnn_autoenc_layer1.denoising_percent   = GUI_parameter4_int;///0..100
             cnn_autoenc_layer1.pause_score_print_ms   = print_pause_ms;///0..100
             cnn_autoenc_layer1.ON_OFF_print_score = print_score;
+            if(GUI_parameter8_int == 0)
+            {
+            cnn_autoenc_layer1.max_ReLU_auto_reset = 1.0f;
+            }
+            else
+            {
             cnn_autoenc_layer1.max_ReLU_auto_reset = (float) GUI_parameter8_int;
+            }
             break;
         case(2):
             if(save_push==1)
