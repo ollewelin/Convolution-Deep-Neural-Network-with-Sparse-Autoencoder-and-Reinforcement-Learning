@@ -276,23 +276,11 @@ int main()
 
     //    cnn_autoenc_layer2.train_encoder();
     cv::waitKey(1);
+    cv::Mat BGR_L1_dict;
      while(1)
     {
         CIFAR_object.insert_a_random_CIFAR_image();
         cnn_autoenc_layer1.use_greedy_enc_method = greedy_mode;///
-/*
-        if(cnn_autoenc_layer1.use_greedy_enc_method == 1)
-        {
-            cnn_autoenc_layer1.use_greedy_enc_method = 0;///
-            //cnn_autoenc_layer1.learning_rate = 0.02;
-           // cnn_autoenc_layer1.use_greedy_enc_method = 0;///TOGGLE
-        }
-        else
-        {
-            cnn_autoenc_layer1.use_greedy_enc_method = 1;///
-           // cnn_autoenc_layer1.learning_rate = 0.02;
-        }
-*/
 
         layer_control = GUI_parameter1_int;
         switch(layer_control)
@@ -300,16 +288,22 @@ int main()
         case(1):
             if(save_push==1)
             {
-                cv::imwrite("L1_dict.bin", cnn_autoenc_layer1.dictionary);
-                cv::imwrite("L1_bias_in2hid.bin", cnn_autoenc_layer1.bias_in2hid);
-                cv::imwrite("L1_bias_hid2out.bin", cnn_autoenc_layer1.bias_hid2out);
+                cnn_autoenc_layer1.copy_dictionary2visual_dict();
+                cnn_autoenc_layer1.visual_dict.convertTo(BGR_L1_dict, CV_8UC3, 255);
+                imshow("BGR",  BGR_L1_dict);
+                cv::imwrite("L1_dict.bmp", BGR_L1_dict);
+               // cv::imwrite("L1_bias_in2hid.bin", cnn_autoenc_layer1.bias_in2hid);
+               // cv::imwrite("L1_bias_hid2out.bin", cnn_autoenc_layer1.bias_hid2out);
                 save_push=0;
             }
             if(load_push==1)
             {
-                cnn_autoenc_layer1.dictionary = cv::imread("L1_dict.bin", 1);
-                cnn_autoenc_layer1.bias_in2hid = cv::imread("L1_bias_in2hid.bin", 1);
-                cnn_autoenc_layer1.bias_hid2out = cv::imread("L1_bias_hid2out.bin", 1);
+
+                BGR_L1_dict = cv::imread("L1_dict.bmp", 1);
+                BGR_L1_dict.convertTo(cnn_autoenc_layer1.visual_dict, CV_32FC3, 1.0f/255.0);
+                cnn_autoenc_layer1.copy_visual_dict2dictionary();
+            //    cnn_autoenc_layer1.bias_in2hid = cv::imread("L1_bias_in2hid.bin", 1);
+            //    cnn_autoenc_layer1.bias_hid2out = cv::imread("L1_bias_hid2out.bin", 1);
                 load_push=0;
             }
             cnn_autoenc_layer1.denoising_percent   = GUI_parameter4_int;///0..100
