@@ -139,8 +139,26 @@ void create_GUI(void)
 
 int main()
 {
-  //  GUI_a gui_obj;///
-  //  gui_obj.init();
+    int use_CIFAR = 1;
+    printf("Would you like to use CIFAR dataset as input image<Y>/<N> \n");
+    char answer_character;
+    answer_character = getchar();
+
+    cv::Mat input_jpg_BGR;
+    cv::Mat input_jpg_FC3;
+
+    if(answer_character == 'Y' || answer_character == 'y')
+    {
+        use_CIFAR = 1;
+    }
+    else
+    {
+        use_CIFAR = 0;
+        printf("now use file:\n");
+        printf("input.JPG\n");
+        input_jpg_BGR = cv::imread("input.JPG", 1);
+        input_jpg_BGR.convertTo(input_jpg_FC3, CV_32FC3, 1.0f/255.0f);
+    }
     if(GUI_parameter7_int < 1)
     {
         print_pause_ms = 1;
@@ -153,9 +171,13 @@ int main()
 
     create_GUI();
     CIFAR_test_data CIFAR_object;///Data input images use CIFAR data set
-    printf("Need CIFAR input data data_batch_1.bin for test\n");
-    CIFAR_object.init_CIFAR();///Read CIFAR data_batch_1.bin file
-    CIFAR_object.print_CIFAR_nr = 0;
+    if(use_CIFAR == 1)
+    {
+        printf("Need CIFAR input data data_batch_1.bin for test\n");
+        CIFAR_object.init_CIFAR();///Read CIFAR data_batch_1.bin file
+        CIFAR_object.print_CIFAR_nr = 0;
+    }
+
     cv::Mat test;
     sparse_autoenc cnn_autoenc_layer1;
     cnn_autoenc_layer1.layer_nr = 1;
@@ -172,7 +194,7 @@ int main()
     cnn_autoenc_layer1.print_greedy_reused_atom = 0;
     cnn_autoenc_layer1.show_encoder_on_conv_cube = 1;
     cnn_autoenc_layer1.use_salt_pepper_noise = 1;///Only depend in COLOR mode. 1 = black..white noise. 0 = all kinds of color noise
-    cnn_autoenc_layer1.learning_rate = 0.003;
+    cnn_autoenc_layer1.learning_rate = 0.0;
     cnn_autoenc_layer1.momentum = 0.0;
     cnn_autoenc_layer1.residual_gain = 0.9;
     cnn_autoenc_layer1.init_in_from_outside = 0;///When init_in_from_outside = 1 then Lx_IN_data_cube is same poiner as the Lx_OUT_convolution_cube of the previous layer
@@ -183,8 +205,18 @@ int main()
                                                ///In a chain of Layer's the Lx_IN_depth will the same size as the Lx_OUT_depth of the previous layer order.
     cnn_autoenc_layer1.Lx_OUT_depth        = 400;///This is the number of atom's in the whole dictionary.
     cnn_autoenc_layer1.stride              = 1;
-    cnn_autoenc_layer1.Lx_IN_hight         = CIFAR_object.CIFAR_height;///Convolution cube hight of data
-    cnn_autoenc_layer1.Lx_IN_widht         = CIFAR_object.CIFAR_width;///Convolution cube width of data
+    if(use_CIFAR == 1)
+    {
+
+        cnn_autoenc_layer1.Lx_IN_hight         = CIFAR_object.CIFAR_height;///Convolution cube hight of data
+        cnn_autoenc_layer1.Lx_IN_widht         = CIFAR_object.CIFAR_width;///Convolution cube width of data
+    }
+    else
+    {
+        cnn_autoenc_layer1.Lx_IN_hight         = input_jpg_FC3.rows;///Convolution cube hight of data
+        cnn_autoenc_layer1.Lx_IN_widht         = input_jpg_FC3.cols;///Convolution cube width of data
+
+    }
     cnn_autoenc_layer1.e_stop_threshold    = 30.0f;
     //cnn_autoenc_layer1.K_sparse            = cnn_autoenc_layer1.Lx_OUT_depth / 15;
     cnn_autoenc_layer1.K_sparse            = 60;
@@ -200,12 +232,20 @@ int main()
     cnn_autoenc_layer1.relu_leak_gain_variation = 0.05f;
     cnn_autoenc_layer1.fix_relu_leak_gain = 0.02f;
 
-    cnn_autoenc_layer1.init();
+    if(use_CIFAR == 1)
+    {
+        cnn_autoenc_layer1.init();
+        CIFAR_object.insert_L1_IN_data_cube = cnn_autoenc_layer1.Lx_IN_data_cube;///Copy over Mat pointer so CIFAR input image could be load into cnn_autoenc_layer1.Lx_IN_data_cube memory.
+        CIFAR_object.insert_a_random_CIFAR_image();
+    }
+    else
+    {
+        cnn_autoenc_layer1.Lx_IN_data_cube = input_jpg_FC3;
+        cnn_autoenc_layer1.init();
+    }
     cnn_autoenc_layer1.k_sparse_sanity_check();
     cnn_autoenc_layer1.copy_dictionary2visual_dict();
 
-    CIFAR_object.insert_L1_IN_data_cube = cnn_autoenc_layer1.Lx_IN_data_cube;///Copy over Mat pointer so CIFAR input image could be load into cnn_autoenc_layer1.Lx_IN_data_cube memory.
-    CIFAR_object.insert_a_random_CIFAR_image();
    /// cv::imshow("Dictionary L1", cnn_autoenc_layer1.dictionary);
    /// cv::imshow("Visual dict L1", cnn_autoenc_layer1.visual_dict);
    /// cv::imshow("L1 IN cube", cnn_autoenc_layer1.Lx_IN_data_cube);
@@ -250,21 +290,6 @@ int main()
     cnn_autoenc_layer2.copy_dictionary2visual_dict();
 
 
-/*
-//ONLY test with noise on L2
-    float *zero_ptr_Lx_IN_data_cube;///Set up pointer for fast direct address of Mat
-    float *index_ptr_Lx_IN_data_cube;///Set up pointer for fast direct address of Mat
-    zero_ptr_Lx_IN_data_cube = cnn_autoenc_layer2.Lx_IN_data_cube.ptr<float>(0);
-    index_ptr_Lx_IN_data_cube = zero_ptr_Lx_IN_data_cube;
-    for(int i=0;i<cnn_autoenc_layer2.Lx_IN_depth;i++)
-    {
-        for(int k=0;k<cnn_autoenc_layer2.Lx_IN_hight*cnn_autoenc_layer2.Lx_IN_widht;k++)
-        {
-             (*index_ptr_Lx_IN_data_cube) = cnn_autoenc_layer2.get_noise();
-             index_ptr_Lx_IN_data_cube++;
-        }
-    }
-*/
   ///  cv::imshow("Dictionary L2", cnn_autoenc_layer2.dictionary);
   ///  cv::imshow("Visual dict L2", cnn_autoenc_layer2.visual_dict);
   ///  cv::imshow("L2 IN cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
@@ -279,13 +304,28 @@ int main()
     cv::Mat BGR_L1_dict;
      while(1)
     {
-        CIFAR_object.insert_a_random_CIFAR_image();
+        if(use_CIFAR == 1)
+        {
+            CIFAR_object.insert_a_random_CIFAR_image();
+        }
+        else
+        {
+          //  cnn_autoenc_layer1.Lx_IN_data_cube = input_jpg_FC3;
+        }
         cnn_autoenc_layer1.use_greedy_enc_method = greedy_mode;///
 
         layer_control = GUI_parameter1_int;
         switch(layer_control)
         {
         case(1):
+            if(autoenc_ON == 1)
+            {
+                cnn_autoenc_layer1.show_encoder_on_conv_cube = 0;///
+            }
+            else
+            {
+                cnn_autoenc_layer1.show_encoder_on_conv_cube = 1;///
+            }
             if(save_push==1)
             {
                 cnn_autoenc_layer1.copy_dictionary2visual_dict();
@@ -337,11 +377,13 @@ int main()
             cnn_autoenc_layer2.denoising_percent   = GUI_parameter4_int;///0..100
             break;
         }
-
-        cv::imshow("L2_IN_cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
-        cv::imshow("L2_OUT_cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
-        cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
-        cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
+        if(autoenc_ON == 0)
+        {
+            cv::imshow("L2_IN_cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
+            cv::imshow("L2_OUT_cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
+            cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
+            cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
+        }
         switch(layer_control)
         {
         case(1):

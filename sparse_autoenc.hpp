@@ -13,7 +13,7 @@
 #include <iostream>
 using namespace std;
 const int MAX_DEPTH = 9999;
-#define ALWAYS_PRINT_RELU_MAX
+//#define ALWAYS_PRINT_RELU_MAX
 #define USE_RAND_RESET_MAX_NODE
 /// ======== Things for evaluation only ==========
 const int ms_patch_show = 1;
@@ -623,6 +623,7 @@ void sparse_autoenc::train_encoder(void)
     int patch_col_offset=0;///This will point where the start left column of the part of input data how will be dot product with the patch
     patch_row_offset = (int) (rand() % (max_patch_h_offset +1));///Randomize a start row of where input data patch will dot product with patch.
     patch_col_offset = (int) (rand() % (max_patch_w_offset +1));
+
     float max_temp = score_bottom_level;
     index_ptr_dict              = zero_ptr_dict;///Set dictionary Mat pointer to start point
     index_ptr_encoder_input     = zero_ptr_encoder_input;///
@@ -835,18 +836,6 @@ void sparse_autoenc::train_encoder(void)
                         ///=========== End copy over the input data to encoder_input =====
                     }
                 }
-                /*
-                index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
-                for(int j=0; j<Lx_IN_depth; j++)
-                {
-
-                    for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
-                    {
-                        (*index_ptr_deno_residual_enc) -= 0.5f;
-                        index_ptr_deno_residual_enc++;
-                    }
-                }
-                */
                 dot_product += bias_in2hid.at<float>(i, 0) * bias_node_level;
 
                 if(show_patch_during_run == 1)///Only for debugging)
@@ -911,7 +900,7 @@ void sparse_autoenc::train_encoder(void)
 
     }
 
-    if(show_encoder_on_conv_cube==1)
+    if(show_encoder_on_conv_cube==1)///If safe CPU time turn of this during Autoencoder learning
     {
         for(int h=0;h<K_sparse;h++)
         {
