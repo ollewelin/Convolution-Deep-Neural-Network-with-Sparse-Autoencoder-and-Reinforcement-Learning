@@ -19,7 +19,7 @@ using namespace std;
 ///************************************************************************
 int GUI_parameter1_int = 1;///layer_nr
 int GUI_parameter2_int = 2;///learning_gain
-int GUI_parameter3_int = 75;
+int GUI_parameter3_int = 100;
 int GUI_parameter4_int = 0;///Nois
 int GUI_parameter5_int = 25;
 int GUI_parameter6_int = 100;
