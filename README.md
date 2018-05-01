@@ -4,7 +4,7 @@ When finish it will be placed here.
 
 Dependency:
 
-OpenCV (Not use GPU yet)
+OpenCV (Not use the computation on GPU yet, to be continued later)
 
 Compile:
 
