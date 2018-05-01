@@ -1,3 +1,4 @@
+#include <opencv2/opencv_modules.hpp>
 #include <opencv2/highgui/highgui.hpp>  // OpenCV window I/O
 #include <opencv2/imgproc/imgproc.hpp> // Gaussian Blur
 #include <stdio.h>
@@ -9,10 +10,10 @@
 #include <stdlib.h>// exit(0);
 #include <iostream>
 using namespace std;
-//using namespace cv;
+using namespace cv;
 #include "sparse_autoenc.hpp"
 #include "CIFAR_test_data.h"
-//#include "GUI_a.hpp"
+using namespace cv::cuda;
 
 ///************************************************************************
 ///*************** (GUI) Graphic User Interface **************************
@@ -28,7 +29,7 @@ int GUI_parameter8_int = 7;
 int save_push = 0;
 int load_push = 0;
 int print_score = 0;
-int greedy_mode = 0;
+int greedy_mode = 1;
 int print_pause_ms = 1;
 int autoenc_ON =1;/// 1 = Autoencoder. 0 = Convolution All layer.
 int H_MIN = 0;
@@ -44,6 +45,7 @@ void callbackButton1(int state, void *)
     autoenc_ON = state;
 
 }
+
 void callbackButton2(int state, void *pointer)
 {
     printf("Save button pressed\n");
@@ -74,6 +76,7 @@ void callbackButton7(int state, void *pointer)
 {
     printf("button7 pressed\n");
 }
+
 
 float GUI_learning_rate = 0.0f;
 
@@ -112,14 +115,14 @@ void create_GUI(void)
     string nameb6 = "Buttom6";
     string nameb7 = "Buttom7";
 
-    //cv::createButton(nameb1,callbackButton1,&button1_data,CV_CHECKBOX,1);
-    cv::createButton(nameb1,callbackButton1,NULL,CV_CHECKBOX,1);
-    cv::createButton(nameb2,callbackButton2,NULL,CV_PUSH_BUTTON,0);
-    cv::createButton(nameb3,callbackButton3,NULL,CV_PUSH_BUTTON,2);
-    cv::createButton(nameb4,callbackButton4,NULL,CV_CHECKBOX,0);///Print
-    cv::createButton(nameb5,callbackButton5,NULL,CV_CHECKBOX,1);///Greedy
-    cv::createButton(nameb6,callbackButton6,NULL,CV_PUSH_BUTTON,0);
-    cv::createButton(nameb7,callbackButton7,NULL,CV_PUSH_BUTTON,0);
+    cv::createButton(nameb1,callbackButton1,NULL,QT_CHECKBOX,1);
+    cv::createButton(nameb2,callbackButton2,NULL,QT_PUSH_BUTTON,0);
+    cv::createButton(nameb3,callbackButton3,NULL,QT_PUSH_BUTTON,2);
+    cv::createButton(nameb4,callbackButton4,NULL,QT_CHECKBOX,0);///Print
+    cv::createButton(nameb5,callbackButton5,NULL,QT_CHECKBOX,1);///Greedy
+    cv::createButton(nameb6,callbackButton6,NULL,QT_PUSH_BUTTON,0);
+    cv::createButton(nameb7,callbackButton7,NULL,QT_PUSH_BUTTON,0);
+
     cv::createTrackbar("Layer numb", GUI_WindowName, &GUI_parameter1_int, layer_MAX, action_GUI);
     cv::createTrackbar("learning g ", GUI_WindowName, &GUI_parameter2_int, 1000, action_GUI);
     cv::createTrackbar("residual g ", GUI_WindowName, &GUI_parameter3_int, 100, action_GUI);
@@ -139,10 +142,18 @@ void create_GUI(void)
 
 int main()
 {
+	printf("GPU ON = %d\n", cv::cuda::getCudaEnabledDeviceCount());
+	printf("Have not yet start use GpuMat\n");
+	printf("To be continue with GPU cv::cuda\n");
+	printf("OpenCV version:\n");
+	std::cout << CV_VERSION << std::endl;
+
     int use_CIFAR = 1;
     printf("Would you like to use CIFAR dataset as input image<Y>/<N> \n");
     char answer_character;
     answer_character = getchar();
+
+    GpuMat test_gpu_mat;///Not yet used
 
     cv::Mat input_jpg_BGR;
     cv::Mat input_jpg_FC3;
@@ -219,7 +230,7 @@ int main()
     }
     cnn_autoenc_layer1.e_stop_threshold    = 30.0f;
     //cnn_autoenc_layer1.K_sparse            = cnn_autoenc_layer1.Lx_OUT_depth / 15;
-    cnn_autoenc_layer1.K_sparse            = 60;
+    cnn_autoenc_layer1.K_sparse            = GUI_parameter5_int;
     cnn_autoenc_layer1.use_dynamic_penalty = 0;
     cnn_autoenc_layer1.penalty_add         = 0.0f;
     cnn_autoenc_layer1.init_noise_gain     = 0.15f;///
@@ -297,7 +308,7 @@ int main()
 
         cnn_autoenc_layer1.random_change_ReLU_leak_variable();
         cnn_autoenc_layer1.train_encoder();
-    //printf("DEBUGG\n");
+    printf("cnn_autoenc_layer1.use_greedy_enc_method = % d\n", cnn_autoenc_layer1.use_greedy_enc_method);
 
     //    cnn_autoenc_layer2.train_encoder();
     cv::waitKey(1);

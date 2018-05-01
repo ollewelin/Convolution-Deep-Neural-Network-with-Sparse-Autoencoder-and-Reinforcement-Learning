@@ -19,7 +19,6 @@ const int MAX_DEPTH = 9999;
 const int ms_patch_show = 1;
 int print_variable_relu_leak = 0;
 /// ==============================================
-
 class sparse_autoenc
 {
 public:
@@ -60,6 +59,7 @@ public:
     int Lx_OUT_hight;///Output parameter how high will the Lx_OUT_convolution_cube be. Depend on patch_side_side and Lx_IN_hight
     ///No padding option implemented
     ///Pooling layer is outside this class
+    //cv::cuda::GpuMat dictionary;///Straight follow Boxes Downwards memory of dictionary
     cv::Mat dictionary;///Straight follow Boxes Downwards memory of dictionary
     cv::Mat visual_dict;///Visual organization of the Mat dictionary
     cv::Mat visual_activation;///Same as visual_dict Mat but add on a activation visualization on top of the image.
