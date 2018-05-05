@@ -19,13 +19,13 @@ using namespace cv::cuda;
 ///*************** (GUI) Graphic User Interface **************************
 ///************************************************************************
 int GUI_parameter1_int = 1;///layer_nr
-int GUI_parameter2_int = 2;///learning_gain
-int GUI_parameter3_int = 100;
+int GUI_parameter2_int = 4;///learning_gain
+int GUI_parameter3_int = 90;
 int GUI_parameter4_int = 0;///Nois
 int GUI_parameter5_int = 25;
 int GUI_parameter6_int = 100;
 int GUI_parameter7_int = 3000;
-int GUI_parameter8_int = 7;
+int GUI_parameter8_int = 10;
 int save_push = 0;
 int load_push = 0;
 int print_score = 0;
