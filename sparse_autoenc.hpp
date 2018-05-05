@@ -5,7 +5,8 @@
 #include <opencv2/imgproc/imgproc.hpp> // Gaussian Blur
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
-#include <opencv2/core/core.hpp>        // Basic OpenCV structures (cv::Mat, Scalar)
+#include <opencv2/cudaarithm.hpp>
+//#include <opencv2/core/core.hpp>        // Basic OpenCV structures (cv::Mat, Scalar)
 #include <cstdlib>///rand() srand()
 //#include <ctime>
 #include <math.h>  // exp
@@ -13,8 +14,8 @@
 #include <iostream>
 using namespace std;
 const int MAX_DEPTH = 9999;
-//#define ALWAYS_PRINT_RELU_MAX
-#define USE_RAND_RESET_MAX_NODE
+///#define ALWAYS_PRINT_RELU_MAX
+///#define USE_RAND_RESET_MAX_NODE
 /// ======== Things for evaluation only ==========
 const int ms_patch_show = 1;
 int print_variable_relu_leak = 0;
@@ -113,6 +114,7 @@ private:
     int dict_h;
     int dict_w;
     float variable_relu_leak;///
+    float actual_relu_leak_level;///The actual relu leak level
     int slide_count;///0..(slide_steps-1) count from 0 up to max when slide the convolution patch fit in
     int slide_steps;///This will be set to a max constant value at init
     int convolution_mode;///1 = do convolution operation not do sparse patch learning. 0= Do sparse autoenc learning process. 0= Not full convolution process.
@@ -175,21 +177,6 @@ void sparse_autoenc::lerning_autencoder(void)
 
     ///Add bias signal to reconstruction
     reconstruct += bias_hid2out * bias_node_level;
-//    reconstruct += bias_hid2out;
-/*
-    index_ptr_bias_hid2out = zero_ptr_bias_hid2out;
-    index_ptr_reconstruct = zero_ptr_reconstruct;
-    for(int j=0; j<Lx_IN_depth; j++)
-    {
-        for(int k=0; k<patch_side_size*patch_side_size*reconstruct.channels(); k++)
-        {
-            *index_ptr_reconstruct += (*index_ptr_bias_hid2out) * bias_node_level;
-            index_ptr_reconstruct++;
-            index_ptr_bias_hid2out++;
-        }
-    }
-*/
-//printf("bias_node_level %f\n", bias_node_level);
     for(int i=0; i<K_sparse; i++) ///Search through the most strongest atom's and do ReLU non linear activation function of hidden nodes
     {
         int at_node = 0;
@@ -202,16 +189,11 @@ void sparse_autoenc::lerning_autencoder(void)
                 break;///atom's in use this time is fewer then K_sparse
                 ///Note this break event will probably never happen if score_bottom_level is set to something less then 0.0f
             }
-            ///--- Do ReLU non linear activation function of hidden nodes
-            ///-- ReLU --
-            train_hidden_node[ (score_table[i]) ] = ReLU_function(train_hidden_node[ (score_table[i]) ]);///Do ReLU only on selected active hidden nodes
-            ///----------
             at_node = (score_table[i]);
         }
         else
         {
             ///No sparsity Mode setting. All atom's used
-            train_hidden_node[i] = ReLU_function(train_hidden_node[i]);///Do ReLU only on all hidden nodes
             at_node = i;
         }
         ///Train selected atom's procedure
@@ -278,7 +260,7 @@ void sparse_autoenc::lerning_autencoder(void)
         }
     }
     ///======= bias_hid2out weights updated and make encoder_loss finish ===============
-
+    float deriv_gradient_decent = 0.0f;
     for(int i=0; i<K_sparse; i++) ///
     {
         int addr_offset = 0;
@@ -309,9 +291,16 @@ void sparse_autoenc::lerning_autencoder(void)
 
         float temp_hidden_delta = 0.0f;
         ///COLOR or GRAY mode
+        if(temp_train_hidd_node < 0.0f)
+        {
+            deriv_gradient_decent = actual_relu_leak_level;
+        }
+        else
+        {
+            deriv_gradient_decent = 1.0f;
+        }
         for(int j=0; j<Lx_IN_depth; j++)
         {
-
             for(int k=0; k<(patch_side_size*patch_side_size*encoder_input.channels()); k++)
             {
                 ///delta_hid = delta_out * weight;
@@ -320,10 +309,10 @@ void sparse_autoenc::lerning_autencoder(void)
                 ///NOTE in this case (autoencoder case) delta_out = encoder_error = (*index_ptr_enc_error)
 
                 ///First backprop delta to hidden_delta so it is possible to update bias_in2hid weight later.
-                temp_hidden_delta += (*index_ptr_enc_error) * (*index_ptr_chan_w_dict);
+                temp_hidden_delta += (*index_ptr_enc_error) * (*index_ptr_chan_w_dict) * deriv_gradient_decent;
 
                 ///Now update tied weight's
-                (*index_ptr_chan_w_dict) = learning_rate * temp_train_hidd_node * (*index_ptr_enc_error) + momentum * (*index_ptr_chan_w_dict);///change_weight = learning_rate * node * delta + momentum * change_weight;
+                (*index_ptr_chan_w_dict) = learning_rate * temp_train_hidd_node * deriv_gradient_decent * (*index_ptr_enc_error) + momentum * (*index_ptr_chan_w_dict);///change_weight = learning_rate * node * delta + momentum * change_weight;
                 (*index_ptr_dict)       += (*index_ptr_chan_w_dict);///weight        = weight + change_weight;
                 index_ptr_enc_error++;
                 index_ptr_chan_w_dict++;
@@ -366,25 +355,7 @@ inline float sparse_autoenc::ReLU_function(float input_value)
     float temp_random = 0.0f;
     if(input_value < 0.0f)
     {
-        if(use_leak_relu == 1)
-        {
-            ///Leak Rectifier function
-            if(use_variable_leak_relu == 1)
-            {
-                ///stochastic changed 0.0< to <1.0 leak parameter used
-                ReLU_result = input_value * variable_relu_leak;
-            }
-            else
-            {
-                ///Fix leak leak parameter used
-                ReLU_result = input_value * fix_relu_leak_gain;
-
-            }
-        }
-        else
-        {
-            ReLU_result = 0.0f;
-        }
+        ReLU_result = actual_relu_leak_level;
     }
     else
     {
@@ -423,9 +394,11 @@ void sparse_autoenc::random_change_ReLU_leak_variable(void)
     temporary_random = (float) (rand() % 65535) / 65536;///0..1.0 range
     temporary_random *= random_range;
     variable_relu_leak = min_relu_leak_gain + temporary_random;
+    actual_relu_leak_level = variable_relu_leak;
+
     if(print_variable_relu_leak == 1)
     {
-        printf("variable_relu_leak = %f\n", variable_relu_leak);
+        printf("actual_relu_leak_level = %f\n", actual_relu_leak_level);
     }
 }
 
@@ -660,7 +633,7 @@ void sparse_autoenc::train_encoder(void)
 
         int node_already_selected_befor = 0;
         int search_turn = 0;
-        for(int h=0; h<K_sparse; h++)///Run through K_sparse time and select by Greedy method and make residual each h turn
+        for(int h=0; h<K_sparse || node_already_selected_befor == 1; h++)///Run through K_sparse time and select by Greedy method and make residual each h turn
         {
             if(search_turn > (10*K_sparse))
             {
@@ -717,20 +690,21 @@ void sparse_autoenc::train_encoder(void)
                     strongest_atom_nr = j;
                 }
             }
-
             node_already_selected_befor = 0;
-            for(int i=0;i<K_sparse;i++)
+            if(strongest_atom_nr != -1 && h>0)
             {
-                if(score_table[i] == strongest_atom_nr)
+                for(int i=0; i<h; i++)
                 {
-                    node_already_selected_befor = 1;
-                    if(ON_OFF_print_score == 1)
+                    if(score_table[i] == strongest_atom_nr)
                     {
-                        printf("Rerun atom %d was already find before. search_turn %d\n", strongest_atom_nr, search_turn);
+                        node_already_selected_befor = 1;
+                        if(ON_OFF_print_score == 1)
+                        {
+                            printf(" h = %d i = %d Rerun atom %d was already find before. search_turn %d\n", h, i, strongest_atom_nr, search_turn);
+                        }
                     }
                 }
             }
-
             if(strongest_atom_nr == -1)
             {
                 score_table[h] = -1;///No atom's was stronger then score_bottom_level.
@@ -761,17 +735,7 @@ void sparse_autoenc::train_encoder(void)
                     index_ptr_dict++;
                 }
             }
-            if(node_already_selected_befor == 0)
-            {
-                train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
-            }
-            else
-            {
-                if(h==K_sparse-1)
-                {
-                    h--;///Rerun the last score_table[h] because it was refinden also as strongest
-                }
-            }
+            train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
         }///h<K_sparse loop end
         /// ======= Only for evaluation =========
         print_score_table_f();
@@ -1277,6 +1241,7 @@ void sparse_autoenc::init(void)
                 exit(0);
             }
             variable_relu_leak = min_relu_leak_gain;///Default start value
+            actual_relu_leak_level = variable_relu_leak;
         }
         else
         {
@@ -1290,6 +1255,7 @@ void sparse_autoenc::init(void)
                 printf("ERROR! parameter fix_relu_leak_gain = %f is outside allowed range 0.0< to <1.0\n", fix_relu_leak_gain);
                 exit(0);
             }
+            actual_relu_leak_level = fix_relu_leak_gain;
             ///END Check fix_relu_leak_gain parameter
         }
         float min_score_b_level = -100000.0f;
@@ -1301,6 +1267,7 @@ void sparse_autoenc::init(void)
     else
     {
         score_bottom_level = 0.0f;
+        actual_relu_leak_level = 0.0f;
     }
     printf("Init CNN layer object Done!\n");
     printf("*** END settings of *********\n");
