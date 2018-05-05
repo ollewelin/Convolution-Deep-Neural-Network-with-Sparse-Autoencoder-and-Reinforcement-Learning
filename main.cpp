@@ -13,14 +13,14 @@ using namespace std;
 using namespace cv;
 #include "sparse_autoenc.hpp"
 #include "CIFAR_test_data.h"
-using namespace cv::cuda;
+///using namespace cv::cuda;
 
 ///************************************************************************
 ///*************** (GUI) Graphic User Interface **************************
 ///************************************************************************
 int GUI_parameter1_int = 1;///layer_nr
 int GUI_parameter2_int = 4;///learning_gain
-int GUI_parameter3_int = 90;
+int GUI_parameter3_int = 90;/// less then 100 = 1.0 gain make residual process more stable. Residual process will not escalate so easy if lower then 100 = 1.0 gain.
 int GUI_parameter4_int = 0;///Nois
 int GUI_parameter5_int = 25;
 int GUI_parameter6_int = 100;
@@ -142,9 +142,10 @@ void create_GUI(void)
 
 int main()
 {
-	printf("GPU ON = %d\n", cv::cuda::getCudaEnabledDeviceCount());
-	printf("Have not yet start use GpuMat\n");
-	printf("To be continue with GPU cv::cuda\n");
+//	printf("GPU ON = %d\n", cv::cuda::getCudaEnabledDeviceCount());
+//	printf("Have not yet start use GpuMat\n");
+//	printf("To be continue with GPU cv::cuda\n");
+    printf("Only CPU used, No CUDA GPU are used\n");
 	printf("OpenCV version:\n");
 	std::cout << CV_VERSION << std::endl;
 
@@ -153,7 +154,7 @@ int main()
     char answer_character;
     answer_character = getchar();
 
-    GpuMat test_gpu_mat;///Not yet used
+//    GpuMat test_gpu_mat;///Not yet used
 
     cv::Mat input_jpg_BGR;
     cv::Mat input_jpg_FC3;

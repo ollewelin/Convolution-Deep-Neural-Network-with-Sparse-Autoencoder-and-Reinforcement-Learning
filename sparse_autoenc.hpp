@@ -5,7 +5,7 @@
 #include <opencv2/imgproc/imgproc.hpp> // Gaussian Blur
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
-#include <opencv2/cudaarithm.hpp>
+//#include <opencv2/cudaarithm.hpp>
 //#include <opencv2/core/core.hpp>        // Basic OpenCV structures (cv::Mat, Scalar)
 #include <cstdlib>///rand() srand()
 //#include <ctime>
@@ -352,7 +352,7 @@ inline float sparse_autoenc::check_remove_Nan(float f_input)
 inline float sparse_autoenc::ReLU_function(float input_value)
 {
     float ReLU_result = 0.0f;
-    float temp_random = 0.0f;
+//    float temp_random = 0.0f;
     if(input_value < 0.0f)
     {
         ReLU_result = actual_relu_leak_level;
