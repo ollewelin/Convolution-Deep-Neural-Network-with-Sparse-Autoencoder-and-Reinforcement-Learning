@@ -735,7 +735,10 @@ void sparse_autoenc::train_encoder(void)
                     index_ptr_dict++;
                 }
             }
-            train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
+            if(node_already_selected_befor == 0)
+            {
+                train_hidden_node[strongest_atom_nr] = temp_hidden_node[strongest_atom_nr];///Store the greedy strongest atom's in train_hidden_node[]
+            }
         }///h<K_sparse loop end
         /// ======= Only for evaluation =========
         print_score_table_f();
