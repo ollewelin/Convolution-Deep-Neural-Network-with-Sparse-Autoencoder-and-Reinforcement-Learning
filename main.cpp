@@ -1,14 +1,8 @@
-//#include <opencv2/opencv_modules.hpp>
 #include <opencv2/highgui/highgui.hpp>  // OpenCV window I/O
 #include <opencv2/imgproc/imgproc.hpp> // Gaussian Blur
 #include <stdio.h>
-//#include <opencv2/opencv.hpp>
-//#include <opencv2/core/core.hpp>        // Basic OpenCV structures (cv::Mat, Scalar)
 #include <opencv2/core.hpp>
-#include <opencv2/cudaarithm.hpp>
-
-//#include <cstdlib>
-//#include <ctime>
+//#include <opencv2/cudaarithm.hpp>
 #include <math.h>  // exp
 #include <stdlib.h>// exit(0);
 #include <iostream>
@@ -16,7 +10,7 @@ using namespace std;
 using namespace cv;
 #include "sparse_autoenc.hpp"
 #include "CIFAR_test_data.h"
-using namespace cv::cuda;
+//using namespace cv::cuda;
 
 ///************************************************************************
 ///*************** (GUI) Graphic User Interface **************************
@@ -145,9 +139,7 @@ void create_GUI(void)
 
 int main()
 {
-	printf("GPU ON = %d\n", cv::cuda::getCudaEnabledDeviceCount());
-	printf("Have not yet start use GpuMat\n");
-	printf("To be continue with GPU cv::cuda\n");
+	printf("Only CPU used. No GPU cv::cuda\n");
 	printf("OpenCV version:\n");
 	std::cout << CV_VERSION << std::endl;
 
@@ -171,63 +163,6 @@ int main()
         printf("input.JPG\n");
         input_jpg_BGR = cv::imread("input.JPG", 1);
         input_jpg_BGR.convertTo(input_jpg_FC3, CV_32FC3, 1.0f/255.0f);
-        printf("Start a GPU test\n");
-        int GPU_TEST = 1;
-        printf("GPU_TEST = %d\n", GPU_TEST);
-        if(GPU_TEST == 1 && input_jpg_FC3.cols > 49 && input_jpg_FC3.rows > 49)
-        {
-
-
-///Test GPU things
-            cv::cuda::GpuMat test_gpu_mat;///Not yet used
-            cv::cuda::GpuMat gpu_roi_part;
-            cv::cuda::GpuMat gpu_roi_part_B;
-            cv::cuda::GpuMat gpu_roi_part_C;
-            test_gpu_mat.create(input_jpg_FC3.rows,input_jpg_FC3.cols,CV_32FC3);
-            gpu_roi_part.create(8,8,CV_32FC3);
-            gpu_roi_part_B.create(8,8,CV_32FC3);
-            gpu_roi_part_C.create(8,8,CV_32FC3);
-            cv::Mat part_of_inputJPG;
-            part_of_inputJPG.create(8,8,CV_32FC3);
-
-            ///src(Rect(left,top,width, height)).copyTo(dst);
-            input_jpg_FC3(Rect(18,10,8,8)).copyTo(part_of_inputJPG);///No effect will be overwritten by gpu_roi_part.download(part_of_inputJPG);
-//for(int h=0;h<)
-            for(int i=0; i<10; i++)
-            {
-
-                test_gpu_mat.upload(input_jpg_FC3);///Data to GPU "device"
-                test_gpu_mat(Rect(5+i,10,8,8)).copyTo(gpu_roi_part);///Inside NVIDIA Rect() a part of image in GPU to another GpuMat
-                test_gpu_mat(Rect(7+i,26+i,8,8)).copyTo(gpu_roi_part_B);///Inside NVIDIA Rect() a part of image in GPU to another GpuMat
-                ///input.JPG test was 50x50
-                test_gpu_mat(Rect(10+i,40,8,8)).copyTo(gpu_roi_part_C);///Inside NVIDIA Rect() a part of image in GPU to another GpuMat
-
-///==========================================================
-///OpenCV documentation regaring   gpu::multiply
-///C++: void gpu::multiply(const GpuMat& a, const GpuMat& b, GpuMat& c, double scale=1, int dtype=-1, Stream& stream=Stream::Null() )
-///C++: void gpu::multiply(const GpuMat& a, const Scalar& sc, GpuMat& c, double scale=1, int dtype=-1, Stream& stream=Stream::Null() )¶
-///Parameters:
-///    a – First source matrix.
-///    b – Second source matrix to be multiplied by a elements.
-///    sc – A scalar to be multiplied by a elements.
-///    c – Destination matrix that has the same size and number of channels as the input array(s). The depth is defined by dtype or a depth.
-///    scale – Optional scale factor.
-///    dtype – Optional depth of the output array.
-///    stream – Stream for the asynchronous version.
-///==========================================================
-                float scaler = (float) i/10;
-                cv::cuda::multiply(gpu_roi_part,gpu_roi_part_B,gpu_roi_part_C, scaler);
-
-                gpu_roi_part_C.download(part_of_inputJPG);///Data back to CPU "host"
-                test_gpu_mat.download(input_jpg_FC3);///Data back to CPU "host"
-
-                imshow("input_jpg_FC3", input_jpg_FC3);
-                imshow("part_of_inputJPG", part_of_inputJPG);
-                waitKey(1000);
-            }
-///End GPU test
-        }
-        printf("End GPU test\n");
     }
 
 

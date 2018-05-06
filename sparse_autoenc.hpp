@@ -5,7 +5,7 @@
 #include <opencv2/imgproc/imgproc.hpp> // Gaussian Blur
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
-#include <opencv2/cudaarithm.hpp>
+//#include <opencv2/cudaarithm.hpp>
 //#include <opencv2/core/core.hpp>        // Basic OpenCV structures (cv::Mat, Scalar)
 #include <cstdlib>///rand() srand()
 //#include <ctime>
@@ -313,16 +313,11 @@ void sparse_autoenc::lerning_autencoder(void)
 
         if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
         {
-           // bias_in2hid.at<float>((score_table[i]), 1)  = learning_rate * bias_node_level * temp_hidden_delta + momentum * bias_in2hid.at<float>((score_table[i]), 1);///Column 1 is the change weight data
-           // bias_in2hid.at<float>((score_table[i]), 0) += bias_in2hid.at<float>((score_table[i]), 1);///Column 0 is the weight data. Column 1 is the change weigh
             bias_in2hid.at<float>((score_table[i]), 0) += learning_rate * bias_node_level * temp_hidden_delta;///Column 0 is the weight data. Column 1 is the change weigh
         }
         else
         {
-//            bias_in2hid.at<float>(i, 1)  = learning_rate * bias_node_level * temp_hidden_delta + momentum * bias_in2hid.at<float>(i, 1);///Column 1 is the change weight data
-//            bias_in2hid.at<float>(i, 0) += bias_in2hid.at<float>(i, 1);///Column 0 is the weight data. Column 1 is the change weight data
             bias_in2hid.at<float>(i, 0) += learning_rate * bias_node_level * temp_hidden_delta;///Column 0 is the weight data. Column 1 is the change weight data
-
         }
      }
 }
