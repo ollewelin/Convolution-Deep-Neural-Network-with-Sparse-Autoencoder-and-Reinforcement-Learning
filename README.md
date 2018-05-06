@@ -20,3 +20,6 @@ CIFAR-10 data set as image input testing.
 To do that download "CIFAR-10 binary version (suitable for C programs)" dataset from
 https://www.cs.toronto.edu/~kriz/cifar.html
 Extract and put data_batch_1.bin in same place as the program. 
+
+TODO:
+Add Batch Normalization after each layer
