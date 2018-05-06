@@ -1,9 +1,12 @@
-#include <opencv2/opencv_modules.hpp>
+//#include <opencv2/opencv_modules.hpp>
 #include <opencv2/highgui/highgui.hpp>  // OpenCV window I/O
 #include <opencv2/imgproc/imgproc.hpp> // Gaussian Blur
 #include <stdio.h>
-#include <opencv2/opencv.hpp>
-#include <opencv2/core/core.hpp>        // Basic OpenCV structures (cv::Mat, Scalar)
+//#include <opencv2/opencv.hpp>
+//#include <opencv2/core/core.hpp>        // Basic OpenCV structures (cv::Mat, Scalar)
+#include <opencv2/core.hpp>
+#include <opencv2/cudaarithm.hpp>
+
 //#include <cstdlib>
 //#include <ctime>
 #include <math.h>  // exp
@@ -13,14 +16,14 @@ using namespace std;
 using namespace cv;
 #include "sparse_autoenc.hpp"
 #include "CIFAR_test_data.h"
-///using namespace cv::cuda;
+using namespace cv::cuda;
 
 ///************************************************************************
 ///*************** (GUI) Graphic User Interface **************************
 ///************************************************************************
 int GUI_parameter1_int = 1;///layer_nr
 int GUI_parameter2_int = 4;///learning_gain
-int GUI_parameter3_int = 90;/// less then 100 = 1.0 gain make residual process more stable. Residual process will not escalate so easy if lower then 100 = 1.0 gain.
+int GUI_parameter3_int = 90;
 int GUI_parameter4_int = 0;///Nois
 int GUI_parameter5_int = 25;
 int GUI_parameter6_int = 100;
@@ -142,10 +145,9 @@ void create_GUI(void)
 
 int main()
 {
-//	printf("GPU ON = %d\n", cv::cuda::getCudaEnabledDeviceCount());
-//	printf("Have not yet start use GpuMat\n");
-//	printf("To be continue with GPU cv::cuda\n");
-    printf("Only CPU used, No CUDA GPU are used\n");
+	printf("GPU ON = %d\n", cv::cuda::getCudaEnabledDeviceCount());
+	printf("Have not yet start use GpuMat\n");
+	printf("To be continue with GPU cv::cuda\n");
 	printf("OpenCV version:\n");
 	std::cout << CV_VERSION << std::endl;
 
@@ -154,7 +156,6 @@ int main()
     char answer_character;
     answer_character = getchar();
 
-//    GpuMat test_gpu_mat;///Not yet used
 
     cv::Mat input_jpg_BGR;
     cv::Mat input_jpg_FC3;
@@ -170,7 +171,66 @@ int main()
         printf("input.JPG\n");
         input_jpg_BGR = cv::imread("input.JPG", 1);
         input_jpg_BGR.convertTo(input_jpg_FC3, CV_32FC3, 1.0f/255.0f);
+        printf("Start a GPU test\n");
+        int GPU_TEST = 1;
+        printf("GPU_TEST = %d\n", GPU_TEST);
+        if(GPU_TEST == 1 && input_jpg_FC3.cols > 49 && input_jpg_FC3.rows > 49)
+        {
+
+
+///Test GPU things
+            cv::cuda::GpuMat test_gpu_mat;///Not yet used
+            cv::cuda::GpuMat gpu_roi_part;
+            cv::cuda::GpuMat gpu_roi_part_B;
+            cv::cuda::GpuMat gpu_roi_part_C;
+            test_gpu_mat.create(input_jpg_FC3.rows,input_jpg_FC3.cols,CV_32FC3);
+            gpu_roi_part.create(8,8,CV_32FC3);
+            gpu_roi_part_B.create(8,8,CV_32FC3);
+            gpu_roi_part_C.create(8,8,CV_32FC3);
+            cv::Mat part_of_inputJPG;
+            part_of_inputJPG.create(8,8,CV_32FC3);
+
+            ///src(Rect(left,top,width, height)).copyTo(dst);
+            input_jpg_FC3(Rect(18,10,8,8)).copyTo(part_of_inputJPG);///No effect will be overwritten by gpu_roi_part.download(part_of_inputJPG);
+//for(int h=0;h<)
+            for(int i=0; i<10; i++)
+            {
+
+                test_gpu_mat.upload(input_jpg_FC3);///Data to GPU "device"
+                test_gpu_mat(Rect(5+i,10,8,8)).copyTo(gpu_roi_part);///Inside NVIDIA Rect() a part of image in GPU to another GpuMat
+                test_gpu_mat(Rect(7+i,26+i,8,8)).copyTo(gpu_roi_part_B);///Inside NVIDIA Rect() a part of image in GPU to another GpuMat
+                ///input.JPG test was 50x50
+                test_gpu_mat(Rect(10+i,40,8,8)).copyTo(gpu_roi_part_C);///Inside NVIDIA Rect() a part of image in GPU to another GpuMat
+
+///==========================================================
+///OpenCV documentation regaring   gpu::multiply
+///C++: void gpu::multiply(const GpuMat& a, const GpuMat& b, GpuMat& c, double scale=1, int dtype=-1, Stream& stream=Stream::Null() )
+///C++: void gpu::multiply(const GpuMat& a, const Scalar& sc, GpuMat& c, double scale=1, int dtype=-1, Stream& stream=Stream::Null() )¶
+///Parameters:
+///    a – First source matrix.
+///    b – Second source matrix to be multiplied by a elements.
+///    sc – A scalar to be multiplied by a elements.
+///    c – Destination matrix that has the same size and number of channels as the input array(s). The depth is defined by dtype or a depth.
+///    scale – Optional scale factor.
+///    dtype – Optional depth of the output array.
+///    stream – Stream for the asynchronous version.
+///==========================================================
+                float scaler = (float) i/10;
+                cv::cuda::multiply(gpu_roi_part,gpu_roi_part_B,gpu_roi_part_C, scaler);
+
+                gpu_roi_part_C.download(part_of_inputJPG);///Data back to CPU "host"
+                test_gpu_mat.download(input_jpg_FC3);///Data back to CPU "host"
+
+                imshow("input_jpg_FC3", input_jpg_FC3);
+                imshow("part_of_inputJPG", part_of_inputJPG);
+                waitKey(1000);
+            }
+///End GPU test
+        }
+        printf("End GPU test\n");
     }
+
+
     if(GUI_parameter7_int < 1)
     {
         print_pause_ms = 1;
@@ -207,7 +267,6 @@ int main()
     cnn_autoenc_layer1.show_encoder_on_conv_cube = 1;
     cnn_autoenc_layer1.use_salt_pepper_noise = 1;///Only depend in COLOR mode. 1 = black..white noise. 0 = all kinds of color noise
     cnn_autoenc_layer1.learning_rate = 0.0;
-    cnn_autoenc_layer1.momentum = 0.0;
     cnn_autoenc_layer1.residual_gain = 0.9;
     cnn_autoenc_layer1.init_in_from_outside = 0;///When init_in_from_outside = 1 then Lx_IN_data_cube is same poiner as the Lx_OUT_convolution_cube of the previous layer
     cnn_autoenc_layer1.color_mode          = 1;///color_mode = 1 is ONLY allowed to use at Layer 1
@@ -267,7 +326,6 @@ int main()
     cnn_autoenc_layer2.use_greedy_enc_method = greedy_mode;///
     cnn_autoenc_layer2.print_greedy_reused_atom = 1;
     cnn_autoenc_layer2.learning_rate = 0.01;
-    cnn_autoenc_layer2.momentum = 0.0;
     cnn_autoenc_layer2.residual_gain = 0.1;
     cnn_autoenc_layer2.show_encoder_on_conv_cube = 1;
     cnn_autoenc_layer2.Lx_IN_data_cube = cnn_autoenc_layer1.Lx_OUT_convolution_cube;///Pointer are copy NOT copy the physical memory. Copy physical memory is not good solution here.
@@ -313,7 +371,7 @@ int main()
 
     //    cnn_autoenc_layer2.train_encoder();
     cv::waitKey(1);
-    cv::Mat BGR_L1_dict;
+    cv::Mat BGR_L1_dict, BGR_L1_bias_in2hid, BGR_L1_bias_hid2out;
      while(1)
     {
         if(use_CIFAR == 1)
@@ -344,8 +402,10 @@ int main()
                 cnn_autoenc_layer1.visual_dict.convertTo(BGR_L1_dict, CV_8UC3, 255);
                 imshow("BGR",  BGR_L1_dict);
                 cv::imwrite("L1_dict.bmp", BGR_L1_dict);
-               // cv::imwrite("L1_bias_in2hid.bin", cnn_autoenc_layer1.bias_in2hid);
-               // cv::imwrite("L1_bias_hid2out.bin", cnn_autoenc_layer1.bias_hid2out);
+                cnn_autoenc_layer1.bias_in2hid.convertTo(BGR_L1_bias_in2hid, CV_8UC1, 255, 128);
+                cnn_autoenc_layer1.bias_hid2out.convertTo(BGR_L1_bias_hid2out, CV_8UC1, 255, 128);
+                cv::imwrite("L1_bias_in2hid.bmp", BGR_L1_bias_in2hid);
+                cv::imwrite("L1_bias_hid2out.bmp", BGR_L1_bias_hid2out);
                 save_push=0;
             }
             if(load_push==1)
@@ -354,8 +414,10 @@ int main()
                 BGR_L1_dict = cv::imread("L1_dict.bmp", 1);
                 BGR_L1_dict.convertTo(cnn_autoenc_layer1.visual_dict, CV_32FC3, 1.0f/255.0);
                 cnn_autoenc_layer1.copy_visual_dict2dictionary();
-            //    cnn_autoenc_layer1.bias_in2hid = cv::imread("L1_bias_in2hid.bin", 1);
-            //    cnn_autoenc_layer1.bias_hid2out = cv::imread("L1_bias_hid2out.bin", 1);
+                BGR_L1_bias_in2hid = cv::imread("L1_bias_in2hid.bmp", 1);
+                BGR_L1_bias_hid2out = cv::imread("L1_bias_hid2out.bmp", 1);
+                BGR_L1_bias_in2hid.convertTo(cnn_autoenc_layer1.bias_in2hid, CV_32FC1, 1.0f/255.0, -0.5f);
+                BGR_L1_bias_hid2out.convertTo(cnn_autoenc_layer1.bias_hid2out, CV_32FC1, 1.0f/255.0, -0.5f);
                 load_push=0;
             }
             cnn_autoenc_layer1.denoising_percent   = GUI_parameter4_int;///0..100
