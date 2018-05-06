@@ -309,8 +309,8 @@ void sparse_autoenc::lerning_autencoder(void)
                 ///NOTE in this case (autoencoder case) delta_out = encoder_error = (*index_ptr_enc_error)
 
                 ///First backprop delta to hidden_delta so it is possible to update bias_in2hid weight later.
-                temp_hidden_delta += (*index_ptr_enc_error) * (*index_ptr_chan_w_dict) * deriv_gradient_decent;
-
+                //temp_hidden_delta += (*index_ptr_enc_error) * (*index_ptr_chan_w_dict) * deriv_gradient_decent;//Bug (*index_ptr_chan_w_dict) replaced with (*index_ptr_dict)
+                temp_hidden_delta += (*index_ptr_enc_error) * (*index_ptr_dict) * deriv_gradient_decent;
                 ///Now update tied weight's
                 (*index_ptr_chan_w_dict) = learning_rate * temp_train_hidd_node * deriv_gradient_decent * (*index_ptr_enc_error) + momentum * (*index_ptr_chan_w_dict);///change_weight = learning_rate * node * delta + momentum * change_weight;
                 (*index_ptr_dict)       += (*index_ptr_chan_w_dict);///weight        = weight + change_weight;
