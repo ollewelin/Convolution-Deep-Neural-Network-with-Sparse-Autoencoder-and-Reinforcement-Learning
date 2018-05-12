@@ -366,36 +366,6 @@ int main()
             {
             cnn_autoenc_layer1.max_ReLU_auto_reset = (float) GUI_parameter8_int;
             }
-            break;
-        case(2):
-            if(save_push==1)
-            {
-                cv::imwrite("L2_dict.bin", cnn_autoenc_layer2.dictionary);
-                cv::imwrite("L2_bias_in2hid.bin", cnn_autoenc_layer2.bias_in2hid);
-                cv::imwrite("L2_bias_hid2out.bin", cnn_autoenc_layer2.bias_hid2out);
-                save_push=0;
-            }
-            if(load_push==1)
-            {
-                cnn_autoenc_layer2.dictionary = cv::imread("L2_dict.bin", 1);
-                cnn_autoenc_layer2.bias_in2hid = cv::imread("L2_bias_in2hid.bin", 1);
-                cnn_autoenc_layer2.bias_hid2out = cv::imread("L12_bias_hid2out.bin", 1);
-                load_push=0;
-            }
-
-            cnn_autoenc_layer2.denoising_percent   = GUI_parameter4_int;///0..100
-            break;
-        }
-        if(autoenc_ON == 0)
-        {
-            cv::imshow("L2_IN_cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
-            cv::imshow("L2_OUT_cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
-            cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
-            cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
-        }
-        switch(layer_control)
-        {
-        case(1):
             if(cnn_autoenc_layer1.K_sparse != GUI_parameter5_int)
             {
                 if(GUI_parameter5_int < 1)
@@ -425,6 +395,22 @@ int main()
             cv::imshow("Visual_dict_L1", cnn_autoenc_layer1.visual_dict);
             break;
         case(2):
+            if(save_push==1)
+            {
+                cv::imwrite("L2_dict.bin", cnn_autoenc_layer2.dictionary);
+                cv::imwrite("L2_bias_in2hid.bin", cnn_autoenc_layer2.bias_in2hid);
+                cv::imwrite("L2_bias_hid2out.bin", cnn_autoenc_layer2.bias_hid2out);
+                save_push=0;
+            }
+            if(load_push==1)
+            {
+                cnn_autoenc_layer2.dictionary = cv::imread("L2_dict.bin", 1);
+                cnn_autoenc_layer2.bias_in2hid = cv::imread("L2_bias_in2hid.bin", 1);
+                cnn_autoenc_layer2.bias_hid2out = cv::imread("L12_bias_hid2out.bin", 1);
+                load_push=0;
+            }
+
+            cnn_autoenc_layer2.denoising_percent   = GUI_parameter4_int;///0..100
             if(cnn_autoenc_layer2.K_sparse != GUI_parameter5_int)
             {
                 if(GUI_parameter5_int < 1)
@@ -449,9 +435,16 @@ int main()
             imshow("L2 noise resid", cnn_autoenc_layer2.denoised_residual_enc_input);
             imshow("L2 bias hid2out", cnn_autoenc_layer2.visual_b_hid2out);
             cv::imshow("Visual_dict_L2", cnn_autoenc_layer2.visual_dict);
+
             break;
         }
-
+        if(autoenc_ON == 0)
+        {
+            cv::imshow("L2_IN_cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
+            cv::imshow("L2_OUT_cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
+            cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
+            cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
+        }
 
      //   cv::waitKey(1);
      //  imshow("L1 rec", cnn_autoenc_layer1.reconstruct);

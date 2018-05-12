@@ -584,33 +584,35 @@ void sparse_autoenc::train_encoder(void)
     index_ptr_encoder_input     = zero_ptr_encoder_input;///
     index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
     noise_probablity = (65535 * denoising_percent) / 100;
+
+    ///First copy over Lx_IN_data to Mat encoder_input and denoised_residual_enc_input
+    for(int j=0; j<Lx_IN_depth; j++)
+    {
+        for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
+        {
+            if(color_mode == 1)
+            {
+                index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((patch_row_offset + k/(patch_side_size*dictionary.channels())) * (Lx_IN_widht * Lx_IN_data_cube.channels()) + (k%(patch_side_size*dictionary.channels())) + (patch_col_offset * Lx_IN_data_cube.channels()));
+            }
+            else
+            {
+                index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((j * Lx_IN_hight * Lx_IN_widht) + ((patch_row_offset + k/patch_side_size) * Lx_IN_widht) + (k%patch_side_size) + (patch_col_offset));
+            }
+            ///=========== Copy over the input data to encoder_input =========
+            *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
+            insert_enc_noise(k);
+            index_ptr_encoder_input++;
+            index_ptr_deno_residual_enc++;
+            ///=========== End copy over the input data to encoder_input =====
+        }
+    }
+
     if(use_greedy_enc_method == 1)
     {
 
         for(int i=0; i<Lx_OUT_depth; i++) ///-1 tell that this will not used
         {
             score_table[i] = -1;///Clear the table
-        }
-        ///First copy over Lx_IN_data to Mat encoder_input and denoised_residual_enc_input
-        for(int j=0; j<Lx_IN_depth; j++)
-        {
-            for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
-            {
-                if(color_mode == 1)
-                {
-                    index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((patch_row_offset + k/(patch_side_size*dictionary.channels())) * (Lx_IN_widht * Lx_IN_data_cube.channels()) + (k%(patch_side_size*dictionary.channels())) + (patch_col_offset * Lx_IN_data_cube.channels()));
-                }
-                else
-                {
-                    index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((j * Lx_IN_hight * Lx_IN_widht) + ((patch_row_offset + k/patch_side_size) * Lx_IN_widht) + (k%patch_side_size) + (patch_col_offset));
-                }
-                ///=========== Copy over the input data to encoder_input =========
-                *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
-                insert_enc_noise(k);
-                index_ptr_encoder_input++;
-                index_ptr_deno_residual_enc++;
-                ///=========== End copy over the input data to encoder_input =====
-            }
         }
 
         int node_already_selected_befor = 0;
@@ -728,80 +730,57 @@ void sparse_autoenc::train_encoder(void)
         /// ======= End evaluation ===========
 ///============= End Dot product and score table in Greedy mode ============
 ///=============
-
-        encoder_loss = 0.0f;///Clear
-        /// lerning_autencoder() will do this:
-        ///Train selected atom's procedure
-        ///Step 1. Make reconstruction
-        ///Step 2. Calculate each pixel's error. Sum up the total loss for report. Also set the hidden_delta[] for step 4
-        ///Step 3. Update patch weights (and bias_hid2out weights also)
-        ///Step 4. Update bias_in2hid regarding the hidden_delta
-        lerning_autencoder();///function do Step1..4
-
     }
-
     else
     {
         ///NON greedy method
-        if(color_mode == 1)///When color mode there is another data access of the dictionary
+
+
+        ///COLOR or GRAY dictionary access
+        for(int i=0; i<Lx_OUT_depth; i++)
         {
-
-            ///COLOR or GRAY dictionary access
-            for(int i=0; i<Lx_OUT_depth; i++)
+            ///Do the dot product (scalar product) of all the atom's in the dictionary with the input data on Lx_IN_data_cube
+            dot_product = 0.0f;
+            for(int j=0; j<Lx_IN_depth; j++)
             {
-                ///Do the dot product (scalar product) of all the atom's in the dictionary with the input data on Lx_IN_data_cube
-                dot_product = 0.0f;
-                for(int j=0; j<Lx_IN_depth; j++)
-                {
 
-                    for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
+                for(int k=0; k<(patch_side_size*patch_side_size*dictionary.channels()); k++)
+                {
+                    if(color_mode == 1)
                     {
-                        if(color_mode == 1)
-                        {
-                            index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((patch_row_offset + k/(patch_side_size*dictionary.channels())) * (Lx_IN_widht * Lx_IN_data_cube.channels()) + (k%(patch_side_size*dictionary.channels())) + (patch_col_offset * Lx_IN_data_cube.channels()));
-                        }
-                        else
-                        {
-                            index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((j * Lx_IN_hight * Lx_IN_widht) + ((patch_row_offset + k/patch_side_size) * Lx_IN_widht) + (k%patch_side_size) + (patch_col_offset));
-                        }
-                        dot_product += (*index_ptr_Lx_IN_data) * (*index_ptr_dict);
-                        index_ptr_dict++;///
-                        if(show_patch_during_run == 1)///Only for debugging)
-                        {
-                            int eval_ROW = k/(patch_side_size*Lx_IN_data_cube.channels());
-                            int eval_COL = k%(patch_side_size*Lx_IN_data_cube.channels());
-                            eval_indata_patch.at<float>(eval_ROW, eval_COL)   = *index_ptr_Lx_IN_data;
-                            eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
-                        }
-                        ///=========== Copy over the input data to encoder_input =========
-                        if(i==0)///Do this copy input data to encoder_input ones on Lx_OUT_depth 0, not for every Lx_OUT_depth turn
-                        {
-                            ///=========== Copy over the input data to encoder_input =========
-                            *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
-                            insert_enc_noise(k);
-                            index_ptr_encoder_input++;
-                            index_ptr_deno_residual_enc++;
-                            ///=========== End copy over the input data to encoder_input =====
-                        }
-                        ///=========== End copy over the input data to encoder_input =====
+                        index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((patch_row_offset + k/(patch_side_size*dictionary.channels())) * (Lx_IN_widht * Lx_IN_data_cube.channels()) + (k%(patch_side_size*dictionary.channels())) + (patch_col_offset * Lx_IN_data_cube.channels()));
+                    }
+                    else
+                    {
+                        index_ptr_Lx_IN_data = zero_ptr_Lx_IN_data + ((j * Lx_IN_hight * Lx_IN_widht) + ((patch_row_offset + k/patch_side_size) * Lx_IN_widht) + (k%patch_side_size) + (patch_col_offset));
+                    }
+                    dot_product += (*index_ptr_Lx_IN_data) * (*index_ptr_dict);
+                    index_ptr_dict++;///
+                    if(show_patch_during_run == 1)///Only for debugging)
+                    {
+                        int eval_ROW = k/(patch_side_size*Lx_IN_data_cube.channels());
+                        int eval_COL = k%(patch_side_size*Lx_IN_data_cube.channels());
+                        eval_indata_patch.at<float>(eval_ROW, eval_COL)   = *index_ptr_Lx_IN_data;
+                        eval_atom_patch.at<float>(eval_ROW, eval_COL)     = *index_ptr_dict + 0.5f;
                     }
                 }
-                dot_product += bias_in2hid.at<float>(i, 0) * bias_node_level;
-
-                if(show_patch_during_run == 1)///Only for debugging)
-                {
-                    imshow("patch", eval_indata_patch);
-                    imshow("atom", eval_atom_patch);
-                    cv::waitKey(ms_patch_show);
-                }
-                ///Put this dot product into train_hidden_node
-                train_hidden_node[i] = ReLU_function(dot_product);
-                //train_hidden_node[i] = dot_product;
-                train_hidden_deleted_max[i] = train_hidden_node[i];
-
             }
+            dot_product += bias_in2hid.at<float>(i, 0) * bias_node_level;
+
+            if(show_patch_during_run == 1)///Only for debugging)
+            {
+                imshow("patch", eval_indata_patch);
+                imshow("atom", eval_atom_patch);
+                cv::waitKey(ms_patch_show);
+            }
+            ///Put this dot product into train_hidden_node
+            train_hidden_node[i] = ReLU_function(dot_product);
+            //train_hidden_node[i] = dot_product;
+            train_hidden_deleted_max[i] = train_hidden_node[i];
 
         }
+
+
 
         encoder_loss = 0.0f;///Clear
         if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
@@ -830,27 +809,19 @@ void sparse_autoenc::train_encoder(void)
             /// ======= Only for evaluation =========
             print_score_table_f();
             /// ======= End evaluation ===========
-
-            /// lerning_autencoder() will do this:
-            ///Train selected atom's procedure
-            ///Step 1. Make reconstruction
-            ///Step 2. Calculate each pixel's error. Sum up the total loss for report. Also set the hidden_delta[] for step 4
-            ///Step 3. Update patch weights (and bias_hid2out weights also)
-            ///Step 4. Update bias_in2hid regarding the hidden_delta
-            lerning_autencoder();///function do Step1..4
-
         }
-        else
-        {
-            ///Not in sparse mode. No sparse constraints this mean's that all atom's in dictionary will be used to represent the reconstruction
-            ///and all atom's will also be trained every cycle.
-            lerning_autencoder();///function do Step1..4
-        }
-
-
     }
 
-    if(show_encoder_on_conv_cube==1)///If safe CPU time turn of this during Autoencoder learning
+    encoder_loss = 0.0f;///Clear
+    /// lerning_autencoder() will do this:
+    ///Train selected atom's procedure
+    ///Step 1. Make reconstruction
+    ///Step 2. Calculate each pixel's error. Sum up the total loss for report. Also set the hidden_delta[] for step 4
+    ///Step 3. Update patch weights (and bias_hid2out weights also)
+    ///Step 4. Update bias_in2hid regarding the hidden_delta
+    lerning_autencoder();///function do Step1..4
+
+    if(show_encoder_on_conv_cube==1)///If save CPU time turn of this during Autoencoder learning
     {
         for(int h=0;h<K_sparse;h++)
         {
@@ -875,9 +846,7 @@ void sparse_autoenc::train_encoder(void)
             }
         }
     }
-
     convolution_mode = 0;
-
 }
 
 void sparse_autoenc::insert_patch_noise(void)
