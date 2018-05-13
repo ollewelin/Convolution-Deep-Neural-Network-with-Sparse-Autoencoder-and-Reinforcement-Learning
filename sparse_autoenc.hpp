@@ -763,9 +763,11 @@ void sparse_autoenc::go_throue_dict(void)
                 cv::waitKey(ms_patch_show);
             }
             ///Put this dot product into train_hidden_node
+        //    printf("dot_product = %f\n", dot_product);
             train_hidden_node[i] = ReLU_function(dot_product);
             //train_hidden_node[i] = dot_product;
             train_hidden_deleted_max[i] = train_hidden_node[i];
+        //    printf("train_hidden_deleted_max[%d] = %f\n", i, train_hidden_deleted_max[i]);
         }
 
         if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
@@ -787,6 +789,7 @@ void sparse_autoenc::go_throue_dict(void)
                         score_table[i] = j;
                     }
                 }
+
                 int index_delete_this = score_table[i];
                 train_hidden_deleted_max[index_delete_this] = score_bottom_level;///Delete this max value so next check will search for next strongest atom's and mark in score table
             }
@@ -955,7 +958,15 @@ void sparse_autoenc::check_dictionary_ptr_patch(void)
 }
 void sparse_autoenc::init(void)
 {
-    input_offset = -0.5;///Use Batch normalization instead
+    if(layer_nr == 1)
+    {
+        input_offset = -0.5;///Use Batch normalization instead
+
+    }
+    else
+    {
+       input_offset = 0.1;///Use Batch normalization instead
+    }
     srand (static_cast <unsigned> (time(0)));///Seed the randomizer
     printf("\n");
     printf("*** Parameter settings of ***\n");

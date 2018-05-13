@@ -267,7 +267,7 @@ int main()
     cnn_autoenc_layer2.init_in_from_outside       = 1;///When init_in_from_outside = 1 then Lx_IN_data_cube is same poiner as the Lx_OUT_convolution_cube of the previous layer
   //  cnn_autoenc_layer2.init_in_from_outside       = 0;
     cnn_autoenc_layer2.color_mode      = 0;///color_mode = 1 is ONLY allowed to use at Layer 1
-    cnn_autoenc_layer2.use_salt_pepper_noise = 0;///Only depend in COLOR mode. 1 = black..white noise. 0 = all kinds of color noise
+    cnn_autoenc_layer2.use_salt_pepper_noise = 1;///Only depend in COLOR mode. 1 = black..white noise. 0 = all kinds of color noise
 
     cnn_autoenc_layer2.patch_side_size  = 7;
     cnn_autoenc_layer2.Lx_IN_depth      = cnn_autoenc_layer1.Lx_OUT_depth;///This is forced inside class to 1 when color_mode = 1. In gray mode = color_mode = 0 this number is the size of the input data depth.
@@ -282,7 +282,7 @@ int main()
     //cnn_autoenc_layer2.K_sparse     = 10;
     cnn_autoenc_layer2.use_dynamic_penalty = 0;
     cnn_autoenc_layer2.penalty_add      = 0.0f;
-    cnn_autoenc_layer2.init_noise_gain = 0.25f;///
+    cnn_autoenc_layer2.init_noise_gain = 0.05f;///
     cnn_autoenc_layer2.enable_denoising = 1;
     cnn_autoenc_layer2.denoising_percent = 50;///0..100
     cnn_autoenc_layer2.use_leak_relu = 1;
@@ -307,6 +307,7 @@ int main()
     //    cnn_autoenc_layer2.train_encoder();
     cv::waitKey(1);
     cv::Mat BGR_L1_dict, BGR_L1_bias_in2hid, BGR_L1_bias_hid2out;
+    cv::Mat BGR_L2_dict, BGR_L2_bias_in2hid, BGR_L2_bias_hid2out;
     cnn_autoenc_layer1.show_encoder_on_conv_cube = 0;///
     cnn_autoenc_layer2.show_encoder_on_conv_cube = 0;///
      while(1)
@@ -383,9 +384,9 @@ int main()
             if(autoenc_ON == 1)
             {
                 cnn_autoenc_layer1.train_encoder();
-                cnn_autoenc_layer1.show_encoder_on_conv_cube = 1;
-             cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
-            cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
+        //        cnn_autoenc_layer1.show_encoder_on_conv_cube = 1;
+        //     cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
+        //    cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
 
             }
             else
@@ -402,22 +403,42 @@ int main()
             cv::imshow("Visual_dict_L1", cnn_autoenc_layer1.visual_dict);
             break;
         case(2):
+            cnn_autoenc_layer2.use_greedy_enc_method = greedy_mode;///
             if(save_push==1)
             {
-                cv::imwrite("L2_dict.bin", cnn_autoenc_layer2.dictionary);
-                cv::imwrite("L2_bias_in2hid.bin", cnn_autoenc_layer2.bias_in2hid);
-                cv::imwrite("L2_bias_hid2out.bin", cnn_autoenc_layer2.bias_hid2out);
+                cnn_autoenc_layer2.copy_dictionary2visual_dict();
+                cnn_autoenc_layer2.visual_dict.convertTo(BGR_L2_dict, CV_8UC1, 255);
+                imshow("BGR",  BGR_L2_dict);
+                cv::imwrite("L2_dict.bmp", BGR_L2_dict);
+                cnn_autoenc_layer2.bias_in2hid.convertTo(BGR_L2_bias_in2hid, CV_8UC1, 255, 128);
+                cnn_autoenc_layer2.bias_hid2out.convertTo(BGR_L2_bias_hid2out, CV_8UC1, 255, 128);
+                cv::imwrite("L2_bias_in2hid.bmp", BGR_L2_bias_in2hid);
+                cv::imwrite("L2_bias_hid2out.bmp", BGR_L2_bias_hid2out);
                 save_push=0;
             }
             if(load_push==1)
             {
-                cnn_autoenc_layer2.dictionary = cv::imread("L2_dict.bin", 1);
-                cnn_autoenc_layer2.bias_in2hid = cv::imread("L2_bias_in2hid.bin", 1);
-                cnn_autoenc_layer2.bias_hid2out = cv::imread("L12_bias_hid2out.bin", 1);
+
+                BGR_L2_dict = cv::imread("L2_dict.bmp", 1);
+                BGR_L2_dict.convertTo(cnn_autoenc_layer2.visual_dict, CV_32FC1, 1.0f/255.0);
+                cnn_autoenc_layer2.copy_visual_dict2dictionary();
+                BGR_L2_bias_in2hid = cv::imread("L2_bias_in2hid.bmp", 1);
+                BGR_L2_bias_hid2out = cv::imread("L2_bias_hid2out.bmp", 1);
+                BGR_L2_bias_in2hid.convertTo(cnn_autoenc_layer2.bias_in2hid, CV_32FC1, 1.0f/255.0, -0.5f);
+                BGR_L2_bias_hid2out.convertTo(cnn_autoenc_layer2.bias_hid2out, CV_32FC1, 1.0f/255.0, -0.5f);
                 load_push=0;
             }
 
             cnn_autoenc_layer2.denoising_percent   = GUI_parameter4_int;///0..100
+            if(GUI_parameter8_int == 0)
+            {
+                cnn_autoenc_layer2.max_ReLU_auto_reset = 1.0f;
+            }
+            else
+            {
+                cnn_autoenc_layer2.max_ReLU_auto_reset = (float) GUI_parameter8_int;
+            }
+
             if(cnn_autoenc_layer2.K_sparse != GUI_parameter5_int)
             {
                 if(GUI_parameter5_int < 1)
