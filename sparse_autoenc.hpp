@@ -151,6 +151,11 @@ private:
     void lerning_autencoder(void);
     void insert_enc_noise(int);
     int noise_probablity;/// noise_probablity = (65535 * denoising_percent) / 100;
+    float dot_product;
+    int patch_row_offset;///This will point where the start upper row of the part of input data how will be dot product with the patch atom
+    int patch_col_offset;///This will point where the start left column of the part of input data how will be dot product with the patch
+    float max_temp;///
+    void go_throue_dict(void);
 
 };
 void sparse_autoenc::lerning_autencoder(void)
@@ -489,10 +494,6 @@ void sparse_autoenc::copy_visual_dict2dictionary(void)
         check_dictionary_ptr_patch();
     }
 }
-void sparse_autoenc::convolve_operation(void)
-{
-    convolution_mode = 1;
-}
 inline void sparse_autoenc::print_score_table_f(void)
 {
                 /// ======= Only for evaluation =========
@@ -562,28 +563,12 @@ inline void sparse_autoenc::insert_enc_noise(int k)
         *index_ptr_deno_residual_enc = *index_ptr_Lx_IN_data + input_offset;///This is for prepare for the autoencoder
     }
 }
-
-void sparse_autoenc::train_encoder(void)
+void sparse_autoenc::go_throue_dict(void)
 {
-    if(use_auto_bias_level == 1)
-    {
-        bias_node_level =  ((float) K_sparse) / ((float) Lx_OUT_depth);
-    }
-    else
-    {
-        bias_node_level = fix_bias_level;
-    }
-    float dot_product = 0.0f;
-    int patch_row_offset=0;///This will point where the start upper row of the part of input data how will be dot product with the patch atom
-    int patch_col_offset=0;///This will point where the start left column of the part of input data how will be dot product with the patch
-    patch_row_offset = (int) (rand() % (max_patch_h_offset +1));///Randomize a start row of where input data patch will dot product with patch.
-    patch_col_offset = (int) (rand() % (max_patch_w_offset +1));
-
-    float max_temp = score_bottom_level;
+    max_temp = score_bottom_level;
     index_ptr_dict              = zero_ptr_dict;///Set dictionary Mat pointer to start point
     index_ptr_encoder_input     = zero_ptr_encoder_input;///
     index_ptr_deno_residual_enc = zero_ptr_deno_residual_enc;///
-    noise_probablity = (65535 * denoising_percent) / 100;
 
     ///First copy over Lx_IN_data to Mat encoder_input and denoised_residual_enc_input
     for(int j=0; j<Lx_IN_depth; j++)
@@ -600,8 +585,11 @@ void sparse_autoenc::train_encoder(void)
             }
             ///=========== Copy over the input data to encoder_input =========
             *index_ptr_encoder_input     = *index_ptr_Lx_IN_data;///This is for prepare for the autoencoder
-            insert_enc_noise(k);
-            index_ptr_encoder_input++;
+            if(convolution_mode == 0)
+            {
+                insert_enc_noise(k);
+                index_ptr_encoder_input++;
+            }
             index_ptr_deno_residual_enc++;
             ///=========== End copy over the input data to encoder_input =====
         }
@@ -609,7 +597,6 @@ void sparse_autoenc::train_encoder(void)
 
     if(use_greedy_enc_method == 1)
     {
-
         for(int i=0; i<Lx_OUT_depth; i++) ///-1 tell that this will not used
         {
             score_table[i] = -1;///Clear the table
@@ -734,8 +721,6 @@ void sparse_autoenc::train_encoder(void)
     else
     {
         ///NON greedy method
-
-
         ///COLOR or GRAY dictionary access
         for(int i=0; i<Lx_OUT_depth; i++)
         {
@@ -777,12 +762,8 @@ void sparse_autoenc::train_encoder(void)
             train_hidden_node[i] = ReLU_function(dot_product);
             //train_hidden_node[i] = dot_product;
             train_hidden_deleted_max[i] = train_hidden_node[i];
-
         }
 
-
-
-        encoder_loss = 0.0f;///Clear
         if(K_sparse != Lx_OUT_depth)///Check if this encoder are set in sparse mode
         {
             for(int i=0; i<Lx_OUT_depth; i++) ///-1 tell that this will not used
@@ -811,6 +792,69 @@ void sparse_autoenc::train_encoder(void)
             /// ======= End evaluation ===========
         }
     }
+}
+void sparse_autoenc::convolve_operation(void)
+{
+    convolution_mode = 1;
+    if(use_auto_bias_level == 1)
+    {
+        bias_node_level =  ((float) K_sparse) / ((float) Lx_OUT_depth);
+    }
+    else
+    {
+        bias_node_level = fix_bias_level;
+    }
+    ///patch_row_offset point where the start upper row of the part of input data how will be dot product with the patch atom
+    ///patch_col_offset point where the start left column of the part of input data how will be dot product with the patch
+   /// patch_row_offset = (int) (rand() % (max_patch_h_offset +1));///Randomize a start row of where input data patch will dot product with patch.
+   /// patch_col_offset = (int) (rand() % (max_patch_w_offset +1));
+    int h_steps = (max_patch_h_offset / stride) + 1;
+    int w_steps = (max_patch_w_offset / stride) + 1;
+    for(int h=0;h<h_steps;h++)
+    {
+        patch_row_offset = h * stride;
+        for(int w=0;w<w_steps;w++)
+        {
+            patch_col_offset = w * stride;
+            go_throue_dict();
+
+            for(int i=0;i<Lx_OUT_depth;i++)
+            {
+                index_ptr_Lx_OUT_conv = zero_ptr_Lx_OUT_conv + (i * Lx_OUT_widht * Lx_OUT_hight) + ((patch_row_offset/stride) * Lx_OUT_widht) + (patch_col_offset/stride);
+                if(score_table[i] == -1)
+                {
+                    *index_ptr_Lx_OUT_conv = 0.0f;
+                }
+                else
+                {
+                    *index_ptr_Lx_OUT_conv = train_hidden_node[i];
+                }
+                ///Batch normalization
+            }
+
+        }
+    }
+
+}
+
+void sparse_autoenc::train_encoder(void)
+{
+    convolution_mode = 0;
+    if(use_auto_bias_level == 1)
+    {
+        bias_node_level =  ((float) K_sparse) / ((float) Lx_OUT_depth);
+    }
+    else
+    {
+        bias_node_level = fix_bias_level;
+    }
+    ///patch_row_offset point where the start upper row of the part of input data how will be dot product with the patch atom
+    ///patch_col_offset point where the start left column of the part of input data how will be dot product with the patch
+    patch_row_offset = (int) (rand() % (max_patch_h_offset +1));///Randomize a start row of where input data patch will dot product with patch.
+    patch_col_offset = (int) (rand() % (max_patch_w_offset +1));
+
+    noise_probablity = (65535 * denoising_percent) / 100;
+    go_throue_dict();
 
     encoder_loss = 0.0f;///Clear
     /// lerning_autencoder() will do this:
@@ -841,12 +885,11 @@ void sparse_autoenc::train_encoder(void)
                 {
                     i = h;
                 }
-                index_ptr_Lx_OUT_conv = zero_ptr_Lx_OUT_conv + (i * Lx_OUT_widht * Lx_OUT_hight) + (patch_row_offset * Lx_OUT_widht) + (patch_col_offset);
+                index_ptr_Lx_OUT_conv = zero_ptr_Lx_OUT_conv + (i * Lx_OUT_widht * Lx_OUT_hight) + ((patch_row_offset/stride) * Lx_OUT_widht) + (patch_col_offset/stride);
                 *index_ptr_Lx_OUT_conv = train_hidden_node[i];
             }
         }
     }
-    convolution_mode = 0;
 }
 
 void sparse_autoenc::insert_patch_noise(void)
