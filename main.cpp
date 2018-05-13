@@ -1,8 +1,14 @@
+//#include <opencv2/opencv_modules.hpp>
 #include <opencv2/highgui/highgui.hpp>  // OpenCV window I/O
 #include <opencv2/imgproc/imgproc.hpp> // Gaussian Blur
 #include <stdio.h>
+//#include <opencv2/opencv.hpp>
+//#include <opencv2/core/core.hpp>        // Basic OpenCV structures (cv::Mat, Scalar)
 #include <opencv2/core.hpp>
-//#include <opencv2/cudaarithm.hpp>
+#include <opencv2/cudaarithm.hpp>
+
+//#include <cstdlib>
+//#include <ctime>
 #include <math.h>  // exp
 #include <stdlib.h>// exit(0);
 #include <iostream>
@@ -10,7 +16,7 @@ using namespace std;
 using namespace cv;
 #include "sparse_autoenc.hpp"
 #include "CIFAR_test_data.h"
-//using namespace cv::cuda;
+using namespace cv::cuda;
 
 ///************************************************************************
 ///*************** (GUI) Graphic User Interface **************************
@@ -18,7 +24,7 @@ using namespace cv;
 int GUI_parameter1_int = 1;///layer_nr
 int GUI_parameter2_int = 4;///learning_gain
 int GUI_parameter3_int = 90;
-int GUI_parameter4_int = 0;///Nois
+int GUI_parameter4_int = 0;///Noise
 int GUI_parameter5_int = 25;
 int GUI_parameter6_int = 100;
 int GUI_parameter7_int = 3000;
@@ -28,6 +34,8 @@ int load_push = 0;
 int print_score = 0;
 int greedy_mode = 1;
 int print_pause_ms = 1;
+
+int test_mode = 0;
 int autoenc_ON =1;/// 1 = Autoencoder. 0 = Convolution All layer.
 int H_MIN = 0;
 int H_MAX = 1000;
@@ -67,7 +75,10 @@ void callbackButton5(int state, void *pointer)
 }
 void callbackButton6(int state, void *pointer)
 {
+    test_mode = state;
+    printf("test_mode =%d\n", test_mode);
     printf("button6 pressed\n");
+
 }
 void callbackButton7(int state, void *pointer)
 {
@@ -117,7 +128,7 @@ void create_GUI(void)
     cv::createButton(nameb3,callbackButton3,NULL,QT_PUSH_BUTTON,2);
     cv::createButton(nameb4,callbackButton4,NULL,QT_CHECKBOX,0);///Print
     cv::createButton(nameb5,callbackButton5,NULL,QT_CHECKBOX,1);///Greedy
-    cv::createButton(nameb6,callbackButton6,NULL,QT_PUSH_BUTTON,0);
+    cv::createButton(nameb6,callbackButton6,NULL,QT_CHECKBOX,0);
     cv::createButton(nameb7,callbackButton7,NULL,QT_PUSH_BUTTON,0);
 
     cv::createTrackbar("Layer numb", GUI_WindowName, &GUI_parameter1_int, layer_MAX, action_GUI);
@@ -139,7 +150,7 @@ void create_GUI(void)
 
 int main()
 {
-	printf("Only CPU used. No GPU cv::cuda\n");
+	printf("GPU ON = %d\n", cv::cuda::getCudaEnabledDeviceCount());
 	printf("OpenCV version:\n");
 	std::cout << CV_VERSION << std::endl;
 
@@ -163,6 +174,63 @@ int main()
         printf("input.JPG\n");
         input_jpg_BGR = cv::imread("input.JPG", 1);
         input_jpg_BGR.convertTo(input_jpg_FC3, CV_32FC3, 1.0f/255.0f);
+        printf("Start a GPU test\n");
+        int GPU_TEST = 1;
+        printf("GPU_TEST = %d\n", GPU_TEST);
+        if(GPU_TEST == 1 && input_jpg_FC3.cols > 49 && input_jpg_FC3.rows > 49)
+        {
+
+
+///Test GPU things
+            cv::cuda::GpuMat test_gpu_mat;///Not yet used
+            cv::cuda::GpuMat gpu_roi_part;
+            cv::cuda::GpuMat gpu_roi_part_B;
+            cv::cuda::GpuMat gpu_roi_part_C;
+            test_gpu_mat.create(input_jpg_FC3.rows,input_jpg_FC3.cols,CV_32FC3);
+            gpu_roi_part.create(8,8,CV_32FC3);
+            gpu_roi_part_B.create(8,8,CV_32FC3);
+            gpu_roi_part_C.create(8,8,CV_32FC3);
+            cv::Mat part_of_inputJPG;
+            part_of_inputJPG.create(8,8,CV_32FC3);
+
+            ///src(Rect(left,top,width, height)).copyTo(dst);
+            input_jpg_FC3(Rect(18,10,8,8)).copyTo(part_of_inputJPG);///No effect will be overwritten by gpu_roi_part.download(part_of_inputJPG);
+//for(int h=0;h<)
+            for(int i=0; i<10; i++)
+            {
+
+                test_gpu_mat.upload(input_jpg_FC3);///Data to GPU "device"
+                test_gpu_mat(Rect(5+i,10,8,8)).copyTo(gpu_roi_part);///Inside NVIDIA Rect() a part of image in GPU to another GpuMat
+                test_gpu_mat(Rect(7+i,26+i,8,8)).copyTo(gpu_roi_part_B);///Inside NVIDIA Rect() a part of image in GPU to another GpuMat
+                ///input.JPG test was 50x50
+                test_gpu_mat(Rect(10+i,40,8,8)).copyTo(gpu_roi_part_C);///Inside NVIDIA Rect() a part of image in GPU to another GpuMat
+
+///==========================================================
+///OpenCV documentation regaring   gpu::multiply
+///C++: void gpu::multiply(const GpuMat& a, const GpuMat& b, GpuMat& c, double scale=1, int dtype=-1, Stream& stream=Stream::Null() )
+///C++: void gpu::multiply(const GpuMat& a, const Scalar& sc, GpuMat& c, double scale=1, int dtype=-1, Stream& stream=Stream::Null() )¶
+///Parameters:
+///    a – First source matrix.
+///    b – Second source matrix to be multiplied by a elements.
+///    sc – A scalar to be multiplied by a elements.
+///    c – Destination matrix that has the same size and number of channels as the input array(s). The depth is defined by dtype or a depth.
+///    scale – Optional scale factor.
+///    dtype – Optional depth of the output array.
+///    stream – Stream for the asynchronous version.
+///==========================================================
+                float scaler = (float) i/10;
+                cv::cuda::multiply(gpu_roi_part,gpu_roi_part_B,gpu_roi_part_C, scaler);
+
+                gpu_roi_part_C.download(part_of_inputJPG);///Data back to CPU "host"
+                test_gpu_mat.download(input_jpg_FC3);///Data back to CPU "host"
+
+                imshow("input_jpg_FC3", input_jpg_FC3);
+                imshow("part_of_inputJPG", part_of_inputJPG);
+                waitKey(1000);
+            }
+///End GPU test
+        }
+        printf("End GPU test\n");
     }
 
 
@@ -331,6 +399,7 @@ int main()
             {
                 cnn_autoenc_layer1.show_encoder_on_conv_cube = 1;///
             }
+            cnn_autoenc_layer1.test_mode = test_mode;
             if(save_push==1)
             {
                 cnn_autoenc_layer1.copy_dictionary2visual_dict();
@@ -366,6 +435,37 @@ int main()
             {
             cnn_autoenc_layer1.max_ReLU_auto_reset = (float) GUI_parameter8_int;
             }
+            break;
+        case(2):
+            cnn_autoenc_layer2.test_mode = test_mode;
+            if(save_push==1)
+            {
+                cv::imwrite("L2_dict.bin", cnn_autoenc_layer2.mat_dictionary);
+                cv::imwrite("L2_bias_in2hid.bin", cnn_autoenc_layer2.bias_in2hid);
+                cv::imwrite("L2_bias_hid2out.bin", cnn_autoenc_layer2.bias_hid2out);
+                save_push=0;
+            }
+            if(load_push==1)
+            {
+                cnn_autoenc_layer2.mat_dictionary = cv::imread("L2_dict.bin", 1);
+                cnn_autoenc_layer2.bias_in2hid = cv::imread("L2_bias_in2hid.bin", 1);
+                cnn_autoenc_layer2.bias_hid2out = cv::imread("L12_bias_hid2out.bin", 1);
+                load_push=0;
+            }
+
+            cnn_autoenc_layer2.denoising_percent   = GUI_parameter4_int;///0..100
+            break;
+        }
+        if(autoenc_ON == 0)
+        {
+            cv::imshow("L2_IN_cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
+            cv::imshow("L2_OUT_cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
+            cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
+            cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
+        }
+        switch(layer_control)
+        {
+        case(1):
             if(cnn_autoenc_layer1.K_sparse != GUI_parameter5_int)
             {
                 if(GUI_parameter5_int < 1)
@@ -387,30 +487,14 @@ int main()
             cnn_autoenc_layer1.random_change_ReLU_leak_variable();
             cnn_autoenc_layer1.copy_dictionary2visual_dict();
             cnn_autoenc_layer1.train_encoder();
-            imshow("L1 rec", cnn_autoenc_layer1.reconstruct);
+            imshow("L1 rec", cnn_autoenc_layer1.mat_reconstruct);
             imshow("L1 enc_input", cnn_autoenc_layer1.encoder_input);
             imshow("L1 enc_error", cnn_autoenc_layer1.enc_error);
-            imshow("L1 noise resid", cnn_autoenc_layer1.denoised_residual_enc_input);
+            imshow("L1 noise resid", cnn_autoenc_layer1.mat_denoised_residual_enc_input);
             imshow("L1 bias hid2out", cnn_autoenc_layer1.visual_b_hid2out);
             cv::imshow("Visual_dict_L1", cnn_autoenc_layer1.visual_dict);
             break;
         case(2):
-            if(save_push==1)
-            {
-                cv::imwrite("L2_dict.bin", cnn_autoenc_layer2.dictionary);
-                cv::imwrite("L2_bias_in2hid.bin", cnn_autoenc_layer2.bias_in2hid);
-                cv::imwrite("L2_bias_hid2out.bin", cnn_autoenc_layer2.bias_hid2out);
-                save_push=0;
-            }
-            if(load_push==1)
-            {
-                cnn_autoenc_layer2.dictionary = cv::imread("L2_dict.bin", 1);
-                cnn_autoenc_layer2.bias_in2hid = cv::imread("L2_bias_in2hid.bin", 1);
-                cnn_autoenc_layer2.bias_hid2out = cv::imread("L12_bias_hid2out.bin", 1);
-                load_push=0;
-            }
-
-            cnn_autoenc_layer2.denoising_percent   = GUI_parameter4_int;///0..100
             if(cnn_autoenc_layer2.K_sparse != GUI_parameter5_int)
             {
                 if(GUI_parameter5_int < 1)
@@ -429,25 +513,18 @@ int main()
             cnn_autoenc_layer2.residual_gain = ((float) GUI_parameter3_int) * 0.01f;
             cnn_autoenc_layer2.copy_dictionary2visual_dict();
             cnn_autoenc_layer2.train_encoder();
-            imshow("L2 rec", cnn_autoenc_layer2.reconstruct);
+            imshow("L2 rec", cnn_autoenc_layer2.mat_reconstruct);
             imshow("L2 enc_input", cnn_autoenc_layer2.encoder_input);
             imshow("L2 enc_error", cnn_autoenc_layer2.enc_error);
-            imshow("L2 noise resid", cnn_autoenc_layer2.denoised_residual_enc_input);
+            imshow("L2 noise resid", cnn_autoenc_layer2.mat_denoised_residual_enc_input);
             imshow("L2 bias hid2out", cnn_autoenc_layer2.visual_b_hid2out);
             cv::imshow("Visual_dict_L2", cnn_autoenc_layer2.visual_dict);
-
             break;
         }
-        if(autoenc_ON == 0)
-        {
-            cv::imshow("L2_IN_cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
-            cv::imshow("L2_OUT_cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
-            cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
-            cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
-        }
+
 
      //   cv::waitKey(1);
-     //  imshow("L1 rec", cnn_autoenc_layer1.reconstruct);
+     //  imshow("L1 rec", cnn_autoenc_layer1.mat_reconstruct);
 cv::waitKey(1);
     }
 
