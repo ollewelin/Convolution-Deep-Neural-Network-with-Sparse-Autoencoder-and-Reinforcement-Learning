@@ -169,7 +169,7 @@ void sparse_autoenc::lerning_autencoder(void)
     }
     else
     {
-        reconstruct = cv::Scalar(0.0f);///Start with a neutral (gray) image
+        reconstruct = cv::Scalar(0.15f);///Start with a neutral (gray) image
     }
 
     ///Add bias signal to reconstruction

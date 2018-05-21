@@ -269,11 +269,11 @@ int main()
     cnn_autoenc_layer2.color_mode      = 0;///color_mode = 1 is ONLY allowed to use at Layer 1
     cnn_autoenc_layer2.use_salt_pepper_noise = 1;///Only depend in COLOR mode. 1 = black..white noise. 0 = all kinds of color noise
 
-    cnn_autoenc_layer2.patch_side_size  = 7;
+    cnn_autoenc_layer2.patch_side_size  = 5;
     cnn_autoenc_layer2.Lx_IN_depth      = cnn_autoenc_layer1.Lx_OUT_depth;///This is forced inside class to 1 when color_mode = 1. In gray mode = color_mode = 0 this number is the size of the input data depth.
                                             ///So if for example the input data come a convolution cube the Lx_IN_depth is the number of the depth of this convolution cube source/input data
                                             ///In a chain of Layer's the Lx_IN_depth will the same size as the Lx_OUT_depth of the previous layer order.
-    cnn_autoenc_layer2.Lx_OUT_depth     = 100;///This is the number of atom's in the whole dictionary.
+    cnn_autoenc_layer2.Lx_OUT_depth     = 200;///This is the number of atom's in the whole dictionary.
     cnn_autoenc_layer2.stride           = 2;///
     cnn_autoenc_layer2.Lx_IN_hight      = cnn_autoenc_layer1.Lx_OUT_hight;///Convolution cube hight of data
     cnn_autoenc_layer2.Lx_IN_widht      = cnn_autoenc_layer1.Lx_OUT_widht;///Convolution cube width of data
@@ -376,7 +376,7 @@ int main()
                 printf("K_sparse change to = %d\n", cnn_autoenc_layer1.K_sparse);
                 cnn_autoenc_layer1.k_sparse_sanity_check();///This should be called every time K_sparse changes
             }
-            cnn_autoenc_layer1.learning_rate = ((float) GUI_parameter2_int) * 0.001f;
+            cnn_autoenc_layer1.learning_rate = ((float) GUI_parameter2_int) * 0.0001f;
             cnn_autoenc_layer1.residual_gain = ((float) GUI_parameter3_int) * 0.01f;
             cnn_autoenc_layer1.fix_bias_level = ((float) GUI_parameter6_int) * 0.01f;
             cnn_autoenc_layer1.random_change_ReLU_leak_variable();
@@ -403,15 +403,17 @@ int main()
             cv::imshow("Visual_dict_L1", cnn_autoenc_layer1.visual_dict);
             break;
         case(2):
+            cnn_autoenc_layer1.convolve_operation();
+
             cnn_autoenc_layer2.use_greedy_enc_method = greedy_mode;///
             if(save_push==1)
             {
                 cnn_autoenc_layer2.copy_dictionary2visual_dict();
-                cnn_autoenc_layer2.visual_dict.convertTo(BGR_L2_dict, CV_8UC1, 255);
+                cnn_autoenc_layer2.visual_dict.convertTo(BGR_L2_dict, CV_8UC3, 255);
                 imshow("BGR",  BGR_L2_dict);
                 cv::imwrite("L2_dict.bmp", BGR_L2_dict);
-                cnn_autoenc_layer2.bias_in2hid.convertTo(BGR_L2_bias_in2hid, CV_8UC1, 255, 128);
-                cnn_autoenc_layer2.bias_hid2out.convertTo(BGR_L2_bias_hid2out, CV_8UC1, 255, 128);
+                cnn_autoenc_layer2.bias_in2hid.convertTo(BGR_L2_bias_in2hid, CV_8UC3, 255, 128);
+                cnn_autoenc_layer2.bias_hid2out.convertTo(BGR_L2_bias_hid2out, CV_8UC3, 255, 128);
                 cv::imwrite("L2_bias_in2hid.bmp", BGR_L2_bias_in2hid);
                 cv::imwrite("L2_bias_hid2out.bmp", BGR_L2_bias_hid2out);
                 save_push=0;
@@ -428,6 +430,9 @@ int main()
                 BGR_L2_bias_hid2out.convertTo(cnn_autoenc_layer2.bias_hid2out, CV_32FC1, 1.0f/255.0, -0.5f);
                 load_push=0;
             }
+       //     cnn_autoenc_layer2.denoising_percent   = GUI_parameter4_int;///0..100
+            cnn_autoenc_layer2.pause_score_print_ms   = print_pause_ms;///0..100
+            cnn_autoenc_layer2.ON_OFF_print_score = print_score;
 
             cnn_autoenc_layer2.denoising_percent   = GUI_parameter4_int;///0..100
             if(GUI_parameter8_int == 0)
@@ -453,7 +458,7 @@ int main()
                 printf("K_sparse change to = %d\n", cnn_autoenc_layer2.K_sparse);
                 cnn_autoenc_layer2.k_sparse_sanity_check();///This should be called every time K_sparse changes
             }
-            cnn_autoenc_layer2.learning_rate = ((float) GUI_parameter2_int) * 0.001f;
+            cnn_autoenc_layer2.learning_rate = ((float) GUI_parameter2_int) * 0.0001f;
             cnn_autoenc_layer2.residual_gain = ((float) GUI_parameter3_int) * 0.01f;
             cnn_autoenc_layer2.copy_dictionary2visual_dict();
             if(autoenc_ON == 1)

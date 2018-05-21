@@ -2,8 +2,8 @@
 # https://www.cs.bu.edu/teaching/cpp/writing-makefiles/
 #-D WITH_CUDA=ON
 # -std=c++11 needed when OpenCV 4.0 used 
-#CC = g++ -std=c++11 -O3
-CC = g++ -O3
+CC = g++ -std=c++11 -O3
+#CC = g++ -O3
 CFLAGS = -g -Wall
 SRCS = main.cpp sparse_autoenc.hpp CIFAR_test_data.cpp CIFAR_test_data.h
 
