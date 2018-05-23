@@ -14,6 +14,7 @@
 #include <iostream>
 using namespace std;
 const int MAX_DEPTH = 9999;
+///#define USE_LIMIT_ReLU
 ///#define ALWAYS_PRINT_RELU_MAX
 ///#define USE_RAND_RESET_MAX_NODE
 /// ======== Things for evaluation only ==========
@@ -33,6 +34,7 @@ public:
     float learning_rate;
     float residual_gain;
     float max_ReLU_auto_reset;
+    float regulazation_lambda;///0.01 or something low
     void init(void);
     void train_encoder(void);
     int show_patch_during_run;///Only for evaluation/debugging
@@ -169,7 +171,7 @@ void sparse_autoenc::lerning_autencoder(void)
     }
     else
     {
-        reconstruct = cv::Scalar(0.15f);///Start with a neutral (gray) image
+        reconstruct = cv::Scalar(0.0f);///Start with a neutral (gray) image
     }
 
     ///Add bias signal to reconstruction
@@ -305,7 +307,8 @@ void sparse_autoenc::lerning_autencoder(void)
                 temp_hidden_delta += (*index_ptr_enc_error) * (*index_ptr_dict) * deriv_gradient_decent;
 
                 ///Now update tied weight's
-                (*index_ptr_dict)       += learning_rate * temp_train_hidd_node * deriv_gradient_decent * (*index_ptr_enc_error);
+                (*index_ptr_dict)       += learning_rate * temp_train_hidd_node * deriv_gradient_decent * (*index_ptr_enc_error) - (regulazation_lambda * (*index_ptr_dict));
+        //        (*index_ptr_dict)       +=  - (regulazation_lambda * (*index_ptr_dict));
                 index_ptr_enc_error++;
                 index_ptr_dict++;
             }
@@ -349,7 +352,7 @@ inline float sparse_autoenc::ReLU_function(float input_value)
     {
         ReLU_result = input_value;
     }
-
+#ifdef USE_LIMIT_ReLU
     if(ReLU_result > max_ReLU_auto_reset)
     {
 #ifdef USE_RAND_RESET_MAX_NODE
@@ -365,8 +368,9 @@ inline float sparse_autoenc::ReLU_function(float input_value)
 #ifdef ALWAYS_PRINT_RELU_MAX
         printf("reach Max ReLU set to %f\n", ReLU_result);
 #endif // ALWAYS_PRINT_RELU_MAX
-
     }
+#endif // USE_LIMIT_ReLU
+
     return ReLU_result;
 }
 
@@ -802,6 +806,7 @@ void sparse_autoenc::go_throue_dict(void)
 }
 void sparse_autoenc::convolve_operation(void)
 {
+    Lx_OUT_convolution_cube = cv::Scalar(0.0f);
     convolution_mode = 1;
     if(use_auto_bias_level == 1)
     {

@@ -23,6 +23,7 @@ int GUI_parameter5_int = 25;
 int GUI_parameter6_int = 100;
 int GUI_parameter7_int = 3000;
 int GUI_parameter8_int = 10;
+int GUI_parameter9_int = 2;///regulazation_lambda
 int save_push = 0;
 int load_push = 0;
 int print_score = 0;
@@ -128,6 +129,7 @@ void create_GUI(void)
     cv::createTrackbar("Bias_level ", GUI_WindowName, &GUI_parameter6_int, 100, action_GUI);
     cv::createTrackbar("ms pause ", GUI_WindowName, &GUI_parameter7_int, 10000, action_GUI);
     cv::createTrackbar("Max node ", GUI_WindowName, &GUI_parameter8_int, 500, action_GUI);
+    cv::createTrackbar("reg lambda ", GUI_WindowName, &GUI_parameter9_int, 1000, action_GUI);
 
 
 }
@@ -237,6 +239,7 @@ int main()
     cnn_autoenc_layer1.min_relu_leak_gain = 0.01f;
     cnn_autoenc_layer1.relu_leak_gain_variation = 0.05f;
     cnn_autoenc_layer1.fix_relu_leak_gain = 0.02f;
+    cnn_autoenc_layer1.regulazation_lambda = 0.0f;/// GUI_parameter9_int
 
     if(use_CIFAR == 1)
     {
@@ -256,7 +259,7 @@ int main()
    /// cv::imshow("Visual dict L1", cnn_autoenc_layer1.visual_dict);
    /// cv::imshow("L1 IN cube", cnn_autoenc_layer1.Lx_IN_data_cube);
    /// cv::imshow("L1 OUT cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
-
+    cnn_autoenc_layer2.regulazation_lambda = 0.0f;/// GUI_parameter9_int
     cnn_autoenc_layer2.show_patch_during_run = 0;///Only for debugging
     cnn_autoenc_layer2.use_greedy_enc_method = greedy_mode;///
     cnn_autoenc_layer2.print_greedy_reused_atom = 1;
@@ -273,7 +276,7 @@ int main()
     cnn_autoenc_layer2.Lx_IN_depth      = cnn_autoenc_layer1.Lx_OUT_depth;///This is forced inside class to 1 when color_mode = 1. In gray mode = color_mode = 0 this number is the size of the input data depth.
                                             ///So if for example the input data come a convolution cube the Lx_IN_depth is the number of the depth of this convolution cube source/input data
                                             ///In a chain of Layer's the Lx_IN_depth will the same size as the Lx_OUT_depth of the previous layer order.
-    cnn_autoenc_layer2.Lx_OUT_depth     = 200;///This is the number of atom's in the whole dictionary.
+    cnn_autoenc_layer2.Lx_OUT_depth     = 100;///This is the number of atom's in the whole dictionary.
     cnn_autoenc_layer2.stride           = 2;///
     cnn_autoenc_layer2.Lx_IN_hight      = cnn_autoenc_layer1.Lx_OUT_hight;///Convolution cube hight of data
     cnn_autoenc_layer2.Lx_IN_widht      = cnn_autoenc_layer1.Lx_OUT_widht;///Convolution cube width of data
@@ -282,7 +285,7 @@ int main()
     //cnn_autoenc_layer2.K_sparse     = 10;
     cnn_autoenc_layer2.use_dynamic_penalty = 0;
     cnn_autoenc_layer2.penalty_add      = 0.0f;
-    cnn_autoenc_layer2.init_noise_gain = 0.05f;///
+    cnn_autoenc_layer2.init_noise_gain = 0.02f;///
     cnn_autoenc_layer2.enable_denoising = 1;
     cnn_autoenc_layer2.denoising_percent = 50;///0..100
     cnn_autoenc_layer2.use_leak_relu = 1;
@@ -320,12 +323,14 @@ int main()
         {
           //  cnn_autoenc_layer1.Lx_IN_data_cube = input_jpg_FC3;
         }
-        cnn_autoenc_layer1.use_greedy_enc_method = greedy_mode;///
+        cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
 
         layer_control = GUI_parameter1_int;
         switch(layer_control)
         {
         case(1):
+            cnn_autoenc_layer1.use_greedy_enc_method = greedy_mode;///
+
             if(save_push==1)
             {
                 cnn_autoenc_layer1.copy_dictionary2visual_dict();
@@ -376,7 +381,8 @@ int main()
                 printf("K_sparse change to = %d\n", cnn_autoenc_layer1.K_sparse);
                 cnn_autoenc_layer1.k_sparse_sanity_check();///This should be called every time K_sparse changes
             }
-            cnn_autoenc_layer1.learning_rate = ((float) GUI_parameter2_int) * 0.0001f;
+            cnn_autoenc_layer1.learning_rate = ((float) GUI_parameter2_int) * 0.001f;
+            cnn_autoenc_layer1.regulazation_lambda = ((float) GUI_parameter9_int) * 0.001f;/// GUI_parameter9_int
             cnn_autoenc_layer1.residual_gain = ((float) GUI_parameter3_int) * 0.01f;
             cnn_autoenc_layer1.fix_bias_level = ((float) GUI_parameter6_int) * 0.01f;
             cnn_autoenc_layer1.random_change_ReLU_leak_variable();
@@ -458,7 +464,8 @@ int main()
                 printf("K_sparse change to = %d\n", cnn_autoenc_layer2.K_sparse);
                 cnn_autoenc_layer2.k_sparse_sanity_check();///This should be called every time K_sparse changes
             }
-            cnn_autoenc_layer2.learning_rate = ((float) GUI_parameter2_int) * 0.0001f;
+            cnn_autoenc_layer2.learning_rate = ((float) GUI_parameter2_int) * 0.001f;
+            cnn_autoenc_layer2.regulazation_lambda = ((float) GUI_parameter9_int) * 0.001f;/// GUI_parameter9_int
             cnn_autoenc_layer2.residual_gain = ((float) GUI_parameter3_int) * 0.01f;
             cnn_autoenc_layer2.copy_dictionary2visual_dict();
             if(autoenc_ON == 1)
@@ -483,7 +490,7 @@ int main()
         {
             cv::imshow("L2_IN_cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
             cv::imshow("L2_OUT_cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
-            cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
+//            cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
             cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
         }
 
