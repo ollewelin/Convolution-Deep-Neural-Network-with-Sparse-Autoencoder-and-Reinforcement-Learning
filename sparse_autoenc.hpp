@@ -17,6 +17,7 @@ const int MAX_DEPTH = 9999;
 ///#define USE_LIMIT_ReLU
 ///#define ALWAYS_PRINT_RELU_MAX
 ///#define USE_RAND_RESET_MAX_NODE
+///#define USE_SHOW_CONV_CUBE_UPDATE
 /// ======== Things for evaluation only ==========
 const int ms_patch_show = 1;
 int print_variable_relu_leak = 0;
@@ -820,8 +821,11 @@ void sparse_autoenc::convolve_operation(void)
     ///patch_col_offset point where the start left column of the part of input data how will be dot product with the patch
     /// patch_row_offset = (int) (rand() % (max_patch_h_offset +1));///Randomize a start row of where input data patch will dot product with patch.
     /// patch_col_offset = (int) (rand() % (max_patch_w_offset +1));
+#ifdef USE_SHOW_CONV_CUBE_UPDATE
     int show_few_count=0;
     int show_each_x= max_patch_h_offset*max_patch_w_offset/8;
+#endif // USE_SHOW_CONV_CUBE_UPDATE
+
     for(int ih=0; ih<(max_patch_h_offset+1); ih++)
     {
         patch_row_offset = ih;
@@ -851,7 +855,8 @@ void sparse_autoenc::convolve_operation(void)
                     *index_ptr_Lx_OUT_conv = train_hidden_node[i];
                 }
             }
-            if(show_few_count < show_each_x)
+#ifdef USE_SHOW_CONV_CUBE_UPDATE
+           if(show_few_count < show_each_x)
             {
                 show_few_count++;
             }
@@ -861,7 +866,7 @@ void sparse_autoenc::convolve_operation(void)
                 cv::waitKey(1);
                 show_few_count=0;
             }
-
+#endif // USE_SHOW_CONV_CUBE_UPDATE
         }
     }
     printf("convolve_operation finish\n");

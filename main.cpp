@@ -207,11 +207,11 @@ int main()
     cnn_autoenc_layer1.residual_gain = 0.9;
     cnn_autoenc_layer1.init_in_from_outside = 0;///When init_in_from_outside = 1 then Lx_IN_data_cube is same poiner as the Lx_OUT_convolution_cube of the previous layer
     cnn_autoenc_layer1.color_mode          = 1;///color_mode = 1 is ONLY allowed to use at Layer 1
-    cnn_autoenc_layer1.patch_side_size     = 13;
+    cnn_autoenc_layer1.patch_side_size     = 7;
     cnn_autoenc_layer1.Lx_IN_depth         = 1;///This is forced inside class to 1 when color_mode = 1. In gray mode = color_mode = 0 this number is the size of the input data depth.
                                                ///So if for example the input data come a convolution cube the Lx_IN_depth is the number of the depth of this convolution cube source/input data
                                                ///In a chain of Layer's the Lx_IN_depth will the same size as the Lx_OUT_depth of the previous layer order.
-    cnn_autoenc_layer1.Lx_OUT_depth        = 400;///This is the number of atom's in the whole dictionary.
+    cnn_autoenc_layer1.Lx_OUT_depth        = 75;///This is the number of atom's in the whole dictionary.
     cnn_autoenc_layer1.stride              = 2;
     if(use_CIFAR == 1)
     {
@@ -272,7 +272,7 @@ int main()
     cnn_autoenc_layer2.color_mode      = 0;///color_mode = 1 is ONLY allowed to use at Layer 1
     cnn_autoenc_layer2.use_salt_pepper_noise = 1;///Only depend in COLOR mode. 1 = black..white noise. 0 = all kinds of color noise
 
-    cnn_autoenc_layer2.patch_side_size  = 5;
+    cnn_autoenc_layer2.patch_side_size  = 7;
     cnn_autoenc_layer2.Lx_IN_depth      = cnn_autoenc_layer1.Lx_OUT_depth;///This is forced inside class to 1 when color_mode = 1. In gray mode = color_mode = 0 this number is the size of the input data depth.
                                             ///So if for example the input data come a convolution cube the Lx_IN_depth is the number of the depth of this convolution cube source/input data
                                             ///In a chain of Layer's the Lx_IN_depth will the same size as the Lx_OUT_depth of the previous layer order.
@@ -415,11 +415,11 @@ int main()
             if(save_push==1)
             {
                 cnn_autoenc_layer2.copy_dictionary2visual_dict();
-                cnn_autoenc_layer2.visual_dict.convertTo(BGR_L2_dict, CV_8UC3, 255);
+                cnn_autoenc_layer2.visual_dict.convertTo(BGR_L2_dict, CV_8UC1, 255);
                 imshow("BGR",  BGR_L2_dict);
                 cv::imwrite("L2_dict.bmp", BGR_L2_dict);
-                cnn_autoenc_layer2.bias_in2hid.convertTo(BGR_L2_bias_in2hid, CV_8UC3, 255, 128);
-                cnn_autoenc_layer2.bias_hid2out.convertTo(BGR_L2_bias_hid2out, CV_8UC3, 255, 128);
+                cnn_autoenc_layer2.bias_in2hid.convertTo(BGR_L2_bias_in2hid, CV_8UC1, 255, 128);
+                cnn_autoenc_layer2.bias_hid2out.convertTo(BGR_L2_bias_hid2out, CV_8UC1, 255, 128);
                 cv::imwrite("L2_bias_in2hid.bmp", BGR_L2_bias_in2hid);
                 cv::imwrite("L2_bias_hid2out.bmp", BGR_L2_bias_hid2out);
                 save_push=0;
@@ -428,12 +428,16 @@ int main()
             {
 
                 BGR_L2_dict = cv::imread("L2_dict.bmp", 1);
-                BGR_L2_dict.convertTo(cnn_autoenc_layer2.visual_dict, CV_32FC1, 1.0f/255.0);
+                cv::Mat GRAY_temp, GRAY_temp_B, GRAY_temp_C;
+                cv::cvtColor(BGR_L2_dict, GRAY_temp, CV_BGR2GRAY);
+                GRAY_temp.convertTo(cnn_autoenc_layer2.visual_dict, CV_32FC1, 1.0f/255.0);
                 cnn_autoenc_layer2.copy_visual_dict2dictionary();
                 BGR_L2_bias_in2hid = cv::imread("L2_bias_in2hid.bmp", 1);
                 BGR_L2_bias_hid2out = cv::imread("L2_bias_hid2out.bmp", 1);
-                BGR_L2_bias_in2hid.convertTo(cnn_autoenc_layer2.bias_in2hid, CV_32FC1, 1.0f/255.0, -0.5f);
-                BGR_L2_bias_hid2out.convertTo(cnn_autoenc_layer2.bias_hid2out, CV_32FC1, 1.0f/255.0, -0.5f);
+                cv::cvtColor(BGR_L2_bias_in2hid, GRAY_temp_B, CV_BGR2GRAY);
+                cv::cvtColor(BGR_L2_bias_hid2out, GRAY_temp_C, CV_BGR2GRAY);
+                GRAY_temp_B.convertTo(cnn_autoenc_layer2.bias_in2hid, CV_32FC1, 1.0f/255.0, -0.5f);
+                GRAY_temp_C.convertTo(cnn_autoenc_layer2.bias_hid2out, CV_32FC1, 1.0f/255.0, -0.5f);
                 load_push=0;
             }
        //     cnn_autoenc_layer2.denoising_percent   = GUI_parameter4_int;///0..100
@@ -483,7 +487,7 @@ int main()
             imshow("L2 noise resid", cnn_autoenc_layer2.denoised_residual_enc_input);
             imshow("L2 bias hid2out", cnn_autoenc_layer2.visual_b_hid2out);
             cv::imshow("Visual_dict_L2", cnn_autoenc_layer2.visual_dict);
-
+            cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
             break;
         }
         if(autoenc_ON == 0)
@@ -491,7 +495,7 @@ int main()
             cv::imshow("L2_IN_cube", cnn_autoenc_layer2.Lx_IN_data_cube);///If no pooling is used between L1-L2 This should be EXACT same image as previous OUT cube layer "Lx OUT cube"
             cv::imshow("L2_OUT_cube", cnn_autoenc_layer2.Lx_OUT_convolution_cube);
 //            cv::imshow("L1_IN_cube", cnn_autoenc_layer1.Lx_IN_data_cube);
-            cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
+//            cv::imshow("L1_OUT_cube", cnn_autoenc_layer1.Lx_OUT_convolution_cube);
         }
 
      //   cv::waitKey(1);
