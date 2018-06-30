@@ -8,11 +8,11 @@ OpenCV (Not use the computation on GPU yet, to be continued later) QT need for t
 
 Compile:
 
-$make
+`$ make`
 
 Run:
 
-$./OW_CNN_R
+`$ ./OW_CNN_R`
 
 
 Input image is eather from input.JPG or CIFAR-10 depending on Y/N start question. 
