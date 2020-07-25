@@ -2,6 +2,10 @@
 Under development Autoencoder tested now, Sparse Greedy Denoiseing tested. Just a place to store my code under develop the code until finish.
 When finish it will be placed here.
 
+Layer 1 dictionary example
+
+![](OLD_13x13_L1_dict.bmp)
+
 Dependency:
 
 OpenCV (Not use the computation on GPU yet, to be continued later) QT need for the push buttoms GUI
