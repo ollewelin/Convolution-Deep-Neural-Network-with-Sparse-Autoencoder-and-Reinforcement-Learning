@@ -9,7 +9,9 @@ SRCS = main.cpp sparse_autoenc.hpp CIFAR_test_data.cpp CIFAR_test_data.h
 
 PROG = OW_CNN_R
 
-OPENCV = `pkg-config opencv --cflags --libs`
+#OPENCV = `pkg-config opencv --cflags --libs` #for opencv 3
+OPENCV = `pkg-config opencv4 --cflags --libs` #for opencv 4
+
 LIBS = $(OPENCV)
 
 $(PROG):$(SRCS)
